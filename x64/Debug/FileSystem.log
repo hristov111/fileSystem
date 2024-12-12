@@ -1,7 +1,7 @@
 ﻿  FileName.cpp
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(217,11): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(217,11): warning C4244:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(217,11): warning C4244:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(217,11): warning C4244:             _Ty=uint64_t
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(217,11): warning C4244:         ]
-  FileSystem.vcxproj -> C:\Users\vboxuser\source\repos\FileSystem\x64\Debug\FileSystem.exe
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(349,11): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(349,11): warning C4244:         with
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(349,11): warning C4244:         [
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(349,11): warning C4244:             _Ty=uint64_t
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(349,11): warning C4244:         ]
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(591,18): error C3861: 'readBlockMeta': identifier not found

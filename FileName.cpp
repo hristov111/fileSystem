@@ -192,7 +192,12 @@ struct Metadata {
 			out.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
 			out.write(key.data(), keyLength);
 		}
+		size_t children_count = children.size();
+		out.write(reinterpret_cast<const char*>(&children_count), sizeof(children_count));
 
+		for (const auto& child : children) {
+			out.write(reinterpret_cast<const char*>(&child), sizeof(child));
+		}
 
 
 
@@ -232,8 +237,8 @@ struct Metadata {
 
 };
 
-void cpin(const char* sourcePath, const char* destName, size_t blockSize);
-void ls();
+void cpin(string& sourcePath, string& destName, size_t blockSize);
+void ls(const char* command);
 
 vector<string> split(const char* str, char delimeter) {
 	vector<string> res;
@@ -315,7 +320,7 @@ uint64_t findDestName(const char* command, string&FileName, bool isFile = true) 
 	return offsets[offsets.size() - 1];
 }
 
-
+void InitializeContainer(string& containerPath);
 
 
 int main(int argc, char* argv[]) {
@@ -323,17 +328,20 @@ int main(int argc, char* argv[]) {
 		std::cerr << "Ussage: <command> [arguments]\n";
 		return 1;
 	}*/
-
+	string fileSystem = "container.bin";
+	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
+	string fileName = "bbb.txt";
+	InitializeContainer(fileSystem);
 	string command = "cpin";
 	if (command == "cpin") {
-		cpin("C:\\Users\\vboxuser\\Desktop\\aaa.txt", "bbb.txt", 4096);
+		cpin(outfile, fileName, 4096);
 	}
-	else if (command == "ls") {
-		ls();
-	}
-	else if (command == "rm") {
-		deleteFile("bbb.txt");
-	}
+	//else if (command == "ls") {
+	//	ls();
+	//}
+	//else if (command == "rm") {
+	//	deleteFile("bbb.txt");
+	//}
 
 	return 0;
 }
@@ -489,25 +497,63 @@ void ls(const char* command) {
 	
 }
 
-Block* readBlockMeta(const string& filePath, uint64_t offset) {
+void printBlockAndContent(const string& filePath, uint64_t offset) {
 	ifstream file(filePath, ios::binary);
 	if (!file) {
 		std::cerr << "Error: Cannot open file.\n";
-		return {};
+		return;
 	}
 
 	// seek the offset
 	file.seekg(offset, ios::beg);
 	if (!file) {
 		std::cerr << "Error: Seek failed. Offset may be invalid.\n";
-		return {};
+		return;
+	}
+	Block* block = Block::deserialize(file);
+	file.seekg(block->content_offset, ios::beg);
+	vector<char> buffer(block->size);
+
+	file.read(buffer.data(), block->size);
+
+	cout << "Block content: ";
+	for (char c : buffer) {
+		cout << c;
 	}
 
-	 return Block::deserialize(file);
+	file.close();
+	delete block;
 
 	
 }
 
+void printMeta(const string& filePath, uint64_t offset) {
+	ifstream file(filePath, ios::binary);
+	if (!file) {
+		std::cerr << "Error: Cannot open file.\n";
+		return;
+	}
+	file.seekg(offset, ios::beg);
+	Metadata* meta = Metadata::deserialize(file);
+	if (meta->isDirectory) {
+		for (const auto& child_offset : meta->children) {
+			file.seekg(child_offset, ios::beg);
+			Metadata* child_meta = Metadata::deserialize(file);
+			cout << child_meta->name << " " << child_meta->size;
+			delete child_meta;
+		}
+	}
+	else {
+		for (const auto& child_block_key : meta->keys) {
+			uint64_t of = metadataHashtable.get(child_block_key);
+			printBlockAndContent(filePath,of);
+
+		}
+	}
+	delete meta;
+}
+
+// TASK: WHEN A  FILE GET DELETED EVERY BLOCK HAS ITS OWN BLOCK META, SO I NEED TO CONSIDER THIS 
 void cpout(const string& containerPath, string fileName, const string outputPath) {
 	string actualFile;
 	uint64_t parent_offset = findDestName(fileName.c_str(), actualFile);
@@ -547,7 +593,8 @@ void cpout(const string& containerPath, string fileName, const string outputPath
 		uint64_t blockOffset = blockHashTable.get(blockKey);
 
 		// seek to the block offset and read the block struct to get the content offset
-		Block* block = readBlockMeta(containerPath,blockOffset);
+		container.seekg(blockOffset, ios::beg);
+		Block* block = Block::deserialize(container);
 		container.seekg(block->content_offset, ios::beg);
 		container.read(buffer, block->size); // Adjust size if block sizes vary
 		if (!container) {
@@ -566,12 +613,13 @@ void cpout(const string& containerPath, string fileName, const string outputPath
 
 }
 
-void cpin(const char* sourcePath, const char* destName, size_t blockSize) {
+void cpin(string& sourcePath, string& destName, size_t blockSize) {
 	string fileName;
-	uint64_t dir_offset = findDestName(destName,fileName);
+	uint64_t dir_offset = findDestName(destName.c_str(), fileName);
 	if (dir_offset == -1) {
 		return;
 	}
+	destName = fileName;
 	std::ifstream src(sourcePath, std::ios::binary); // opens the file in binary mode , file is read byte by byte
 	if (!src) {
 		std::cerr << "Error: Cannot open source file. \n";
@@ -587,7 +635,7 @@ void cpin(const char* sourcePath, const char* destName, size_t blockSize) {
 
 	// Metadata for the file
 	Metadata fileMeta;
-	strncpy_s(fileMeta.name, fileName.c_str(), sizeof(fileMeta.name));
+	strncpy_s(fileMeta.name, destName.c_str(), sizeof(fileMeta.name));
 	fileMeta.isDirectory = false;
 	fileMeta.isDeleted = false;
 	fileMeta.size = 0;
@@ -660,11 +708,20 @@ void cpin(const char* sourcePath, const char* destName, size_t blockSize) {
 	fileMeta.serialize(container);
 	metadataHashtable.insert(str, fileMeta.offset);
 
+	printMeta(sourcePath,fileMeta.offset);
+
 	// Write metadata to the container 
 	cout << "File copied to container.\n";
 }
 
 void md(string& containerPath, string& directoryName) {
+	string directory;
+	uint64_t parent_offset = findDestName(directoryName.c_str(), directory);
+	if (parent_offset == -1) {
+		return;
+	}
+	directoryName = directory;
+
 	ifstream container(containerPath, ios::binary | ios::in);
 	if (!container) {
 		cerr << "Error: Cannot open container.\n";
@@ -696,7 +753,7 @@ void md(string& containerPath, string& directoryName) {
 	strncpy_s(newDirMeta->name, directoryName.c_str(), sizeof(newDirMeta->name));
 	newDirMeta->isDirectory = true;
 	newDirMeta->size = 0;
-	newDirMeta->parent = currentDirectoryOffset;
+	newDirMeta->parent = parent_offset;
 	newDirMeta->isDeleted = false;
 
 	// Determine the offset for the new directory metadata
@@ -719,27 +776,27 @@ void md(string& containerPath, string& directoryName) {
 
 }
 
+// 2 options - cd Home\user\soemwhere or cd Home
 void cd(string& containerPath, string& directoryName) {
+	string directory;
+	uint64_t parent_offset = findDestName(directoryName.c_str(), directory);
+	if (parent_offset == -1) {
+		return;
+	}
+	directoryName = directory;
 	ifstream container(containerPath, ios::binary);
 	if (!container) {
 		cerr << "Error: Cannot open container.\n";
 		return;
 	}
-	container.seekg(currentDirectoryOffset, ios::beg);
+	container.seekg(parent_offset, ios::beg);
 	Metadata* currentDirMeta = Metadata::deserialize(container);
 	if (!currentDirMeta->isDirectory || currentDirMeta->isDeleted) {
 		cerr << "Error: There is a corruptuion with the direcotries.\n";
 		return;
 	}
-	for (const auto& off : currentDirMeta->children) {
-		container.seekg(off, ios::beg);
-		Metadata* currentChild = Metadata::deserialize(container);
-		if (string(currentChild->name) == directoryName && !currentChild->isDeleted && currentChild->isDirectory) {
-			currentDirectoryOffset = currentChild->offset;
-		}
-		delete currentChild;
-
-	}
+	currentDirectoryOffset = parent_offset;
+	
 	delete currentDirMeta;
 }
 
@@ -794,8 +851,16 @@ void DeleteDir(ifstream& containerRead, ofstream& containerWrite,Metadata* curre
 	}
 }
 
+// 2 options rd Folderaa or rd Home\Folderaaa
 void rd(string& containerPath, string& dirName) {
 	// delete a folder in current directory, if there are other files or directories in that, thy are also deleted
+	string dir;
+	uint64_t parent_offset = findDestName(dirName.c_str(), dir);
+	if (parent_offset == -1) {
+		return;
+	}
+	dirName = dir;
+
 	ifstream containerRead(containerPath, ios::binary);
 	if (!containerRead) {
 		cerr << "Error: Cannot open container.\n";
@@ -807,7 +872,7 @@ void rd(string& containerPath, string& dirName) {
 		return;
 	}
 
-	containerRead.seekg(currentDirectoryOffset, ios::beg);
+	containerRead.seekg(parent_offset, ios::beg);
 	Metadata* currentMeta = Metadata::deserialize(containerRead);
 	if (!currentMeta->isDirectory || currentMeta->isDeleted) {
 		cerr << "Error: There is a corruptuion with the direcotries.\n";
