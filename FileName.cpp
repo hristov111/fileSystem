@@ -8,6 +8,84 @@
 #include <functional> 
 
 using namespace std;
+class HashTable {
+private:
+	static const int TABLE_SIZE = 100;
+	std::list<std::pair<string, uint64_t>> table[TABLE_SIZE];
+
+	// custom hash function
+	int hashFunction(const std::string& key) const {
+		int hash = 0;
+		for (char c : key) {
+			hash = (hash * 31 + c) % TABLE_SIZE;
+		}
+		return hash;
+	}
+
+public:
+	// Insert a key value pair
+	void insert(const string& key, const uint64_t& value) {
+		int index = hashFunction(key);
+
+		for (auto& kv : table[index]) {
+			if (kv.first == key) {
+				kv.second = value;
+				return;
+			}
+			// key already exists
+		}
+
+		table[index].emplace_back(key, value);
+	}
+
+	// retrieve a value by key
+	uint64_t get(const std::string& key) const {
+		int index = hashFunction(key);
+
+		for (const auto& kv : table[index]) {
+			if (kv.first == key) { // Key found
+				return kv.second;
+			}
+		}
+
+		throw std::runtime_error("Key not found in the hash table");
+	}
+
+	bool exists(const string& key) const {
+		int index = hashFunction(key);
+
+		for (const auto& kv : table[index]) {
+			if (kv.first == key) { // Key exists
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool remove(const string& key) {
+		int index = hashFunction(key);
+
+		for (auto it = table[index].begin(); it != table[index].end(); it++) {
+			if (it->first == key) { // Key found
+				table[index].erase(it);
+				return true;
+			}
+		}
+		return false; // key not found
+	}
+
+	void iterate(std::function<void(const std::string&, uint64_t)> func) const {
+		for (int i = 0; i < TABLE_SIZE; ++i) {
+			for (const auto& kv : table[i]) {
+				func(kv.first, kv.second);
+			}
+		}
+	}
+};
+
+HashTable blockHashTable;
+HashTable metadataHashtable;
+
 // deduplication ?
 // Deduplication is a technique used to 
 // eliminate duplicate copies of data in 
@@ -184,88 +262,60 @@ vector<string> split(const char* str, char delimeter) {
 
 }
 
-void findDestName(const char* command) {
 
+uint64_t findDestName(const char* command, string&FileName, bool isFile = true) {
+	std::ifstream src("container.bin", std::ios::binary); // opens the file in binary mode , file is read byte by byte
+	if (!src) {
+		std::cerr << "Error: Cannot open source file. \n";
+		return -1;
+	}
+	vector<string> directories = split(command, '\\');
+	if (isFile) {
+		FileName = directories.back();
+		directories.pop_back();
+	}
+	// we start with parent offset > 
+	vector<uint64_t> offsets;
+
+	Metadata* parentMeta = nullptr;
+	Metadata* childMeta = nullptr;
+	for (const auto& dir : directories) {
+		if (!metadataHashtable.exists(dir)) {
+			cerr << "Error: The path specified doesnt exist!\n";
+			delete parentMeta;
+			delete childMeta;
+			return -1;
+		}
+		uint64_t offset = metadataHashtable.get(dir);
+		src.seekg(offset, ios::beg);
+		childMeta = Metadata::deserialize(src);
+		if (parentMeta != nullptr) {
+			bool isPart = false;
+			for (const auto& off : parentMeta->children) {
+				if (off == childMeta->offset) {
+					isPart = true;
+					break;
+				}
+			}
+			if (!isPart) {
+				cerr << "Error: " << dir << " is not a valid child of its parent\n";
+				delete parentMeta;
+				delete childMeta;
+				return -1;
+
+			}
+		}
+		
+		offsets.push_back(offset);
+		delete parentMeta; // free prvious parent
+		parentMeta = childMeta; // current child becomes the new parent
+		childMeta = nullptr; // reset childmeta
+	}
+	delete parentMeta;
+	return offsets[offsets.size() - 1];
 }
 
-class HashTable {
-private:
-	static const int TABLE_SIZE = 100;
-	std::list<std::pair<string, uint64_t>> table[TABLE_SIZE];
 
-	// custom hash function
-	int hashFunction(const std::string& key) const {
-		int hash = 0;
-		for (char c : key) {
-			hash = (hash * 31 + c) % TABLE_SIZE;
-		}
-		return hash;
-	}
-
-public:
-	// Insert a key value pair
-	void insert(const string& key, const uint64_t& value) {
-		int index = hashFunction(key);
-
-		for (auto& kv : table[index]) {
-			if (kv.first == key) {
-				kv.second = value;
-				return;
-			}
-// key already exists
-		}
-
-		table[index].emplace_back(key,value);
-	}
-
-	// retrieve a value by key
-	uint64_t get(const std::string& key) const {
-		int index = hashFunction(key);
-
-		for (const auto& kv : table[index]) {
-			if (kv.first == key) { // Key found
-				return kv.second;
-			}
-		}
-
-		throw std::runtime_error("Key not found in the hash table");
-	}
-
-	bool exists(const string& key) const {
-		int index = hashFunction(key);
-
-		for (const auto& kv : table[index]) {
-			if (kv.first == key) { // Key exists
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool remove(const string& key) {
-		int index = hashFunction(key);
-
-		for (auto it = table[index].begin(); it != table[index].end(); it++) {
-			if (it->first == key) { // Key found
-				table[index].erase(it);
-				return true;
-			}
-		}
-		return false; // key not found
-	}
-
-	void iterate(std::function<void(const std::string&, uint64_t)> func) const {
-		for (int i = 0; i < TABLE_SIZE; ++i) {
-			for (const auto& kv : table[i]) {
-				func(kv.first, kv.second);
-			}
-		}
-	}
-};
-
-
-HashTable blockHashTable;
-HashTable metadataHashtable;
 
 
 int main(int argc, char* argv[]) {
@@ -326,7 +376,14 @@ std::vector<uint64_t> allocatedContiguosBlocks(size_t requiredBlocks, size_t blo
 
 }
 
-void deleteFile(const string& fileName) {
+void deleteFile(string& fileName) {
+	string actual_fileName;
+	uint64_t parent_offset = findDestName(fileName.c_str(), actual_fileName);
+	if (parent_offset == -1) {
+		return;
+	}
+	fileName = actual_fileName;
+
 	if(!metadataHashtable.exists(fileName)){
 		std::cerr << "Error: file " << fileName << " not found in the container" << endl;
 		return;
@@ -344,6 +401,15 @@ void deleteFile(const string& fileName) {
 
 	// Read an process	the container file
 	uint64_t offset = metadataHashtable.get(fileName);
+
+	// remove the meta from parent children
+	container.seekg(parent_offset, ios::beg);
+	Metadata* parentMeta = Metadata::deserialize(container);
+	parentMeta->children.erase(remove(parentMeta->children.begin(), parentMeta->children.end(), offset), parentMeta->children.end());
+	
+	// Write back the changed meta for the parent
+	containerWrite.seekp(parent_offset, ios::beg);
+	parentMeta->serialize(containerWrite);
 
 
 	// find the metadata offset for the file 
@@ -399,23 +465,28 @@ void InitializeContainer(string& containerPath) {
 
 }
 
-void ls() {
+void ls(const char* command) {
+	// we need to find the offset of the dir that we want to ls 
+	string fileName;
+	uint64_t last_offset = findDestName(command, fileName, false);
+	if (last_offset == -1) {
+		return;
+	}
 	std::ifstream container("container.bin", std::ios::binary);
 	if (!container) {
 		std::cerr << "Error: Cannot open container.\n";
 		return;
 	}
-	metadataHashtable.iterate([&container](const string& fileName, uint64_t offset) {
-		// seek to the metdatada offset in the container file
-		container.seekg(offset);
-
-		// Read metadata
-		Metadata fileMeta;
-		container.read(reinterpret_cast<char*>(&fileMeta), sizeof(Metadata));
-
-		// Print metadata information
-		std::cout << fileMeta.name << "\t" << fileMeta.size << "B\n";
-	});
+	container.seekg(last_offset, ios::beg);
+	Metadata* parentMeta = Metadata::deserialize(container);
+	for (const auto& off : parentMeta->children) {
+		container.seekg(off, ios::beg);
+		Metadata* currentChild = Metadata::deserialize(container);
+		cout << currentChild->name << " " << currentChild->size << endl;
+		delete currentChild;
+	}
+	delete parentMeta;
+	
 }
 
 Block* readBlockMeta(const string& filePath, uint64_t offset) {
@@ -437,7 +508,15 @@ Block* readBlockMeta(const string& filePath, uint64_t offset) {
 	
 }
 
-void cpout(const string& containerPath, const string fileName, const string outputPath) {
+void cpout(const string& containerPath, string fileName, const string outputPath) {
+	string actualFile;
+	uint64_t parent_offset = findDestName(fileName.c_str(), actualFile);
+	if (parent_offset == -1) {
+		return;
+	}
+	fileName = actualFile;
+
+
 	ifstream container(containerPath, ios::binary);
 	if (!container) {
 		std::cerr << "Failed: cannot open container.\n";
@@ -488,6 +567,11 @@ void cpout(const string& containerPath, const string fileName, const string outp
 }
 
 void cpin(const char* sourcePath, const char* destName, size_t blockSize) {
+	string fileName;
+	uint64_t dir_offset = findDestName(destName,fileName);
+	if (dir_offset == -1) {
+		return;
+	}
 	std::ifstream src(sourcePath, std::ios::binary); // opens the file in binary mode , file is read byte by byte
 	if (!src) {
 		std::cerr << "Error: Cannot open source file. \n";
@@ -503,9 +587,11 @@ void cpin(const char* sourcePath, const char* destName, size_t blockSize) {
 
 	// Metadata for the file
 	Metadata fileMeta;
-	strncpy_s(fileMeta.name, destName, sizeof(fileMeta.name));
+	strncpy_s(fileMeta.name, fileName.c_str(), sizeof(fileMeta.name));
 	fileMeta.isDirectory = false;
+	fileMeta.isDeleted = false;
 	fileMeta.size = 0;
+	fileMeta.parent = dir_offset;
 
 
 	// Get the file size 
