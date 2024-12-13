@@ -175,6 +175,7 @@ struct Metadata {
 	bool isDeleted;
 
 	void serialize(std::ofstream& out) {
+		out.write(name, sizeof(name));
 		out.write(reinterpret_cast<const char*>(&isDirectory), sizeof(isDirectory));
 		out.write(reinterpret_cast<const char*>(&offset), sizeof(offset));
 		out.write(reinterpret_cast<const char*>(&size), sizeof(size));
@@ -194,7 +195,7 @@ struct Metadata {
 		}
 		size_t children_count = children.size();
 		out.write(reinterpret_cast<const char*>(&children_count), sizeof(children_count));
-
+		
 		for (const auto& child : children) {
 			out.write(reinterpret_cast<const char*>(&child), sizeof(child));
 		}
@@ -220,15 +221,30 @@ struct Metadata {
 		in.read(reinterpret_cast<char*>(&blockKeycount), sizeof(blockKeycount));
 
 		// Read each string in the vector
-		metadata->keys.resize(blockKeycount);
-		for (size_t i = 0; i < blockKeycount; ++i) {
-			size_t keyLength;
-			in.read(reinterpret_cast<char*>(&keyLength), sizeof(keyLength));
-			metadata->keys[i].resize(keyLength);
-			in.read(&metadata->keys[i][0], keyLength);
+		  // Deserialize the keys vector
+		size_t blockKeyCount;
+		in.read(reinterpret_cast<char*>(&blockKeyCount), sizeof(blockKeyCount));
+		if (blockKeyCount > 0) {
+			metadata->keys.resize(blockKeyCount);
+			for (size_t i = 0; i < blockKeyCount; ++i) {
+				size_t keyLength;
+				in.read(reinterpret_cast<char*>(&keyLength), sizeof(keyLength));
+				if (keyLength > 0) {
+					metadata->keys[i].resize(keyLength);
+					in.read(&metadata->keys[i][0], keyLength);
+				}
+			}
 		}
 
-
+		// Deserialize the children vector
+		size_t childrenCount;
+		in.read(reinterpret_cast<char*>(&childrenCount), sizeof(childrenCount));
+		if (childrenCount > 0) {
+			metadata->children.resize(childrenCount);
+			for (size_t i = 0; i < childrenCount; ++i) {
+				in.read(reinterpret_cast<char*>(&metadata->children[i]), sizeof(metadata->children[i]));
+			}
+		}
 
 		return metadata;
 
@@ -267,60 +283,62 @@ vector<string> split(const char* str, char delimeter) {
 
 }
 
-
-uint64_t findDestName(const char* command, string&FileName, bool isFile = true) {
-	std::ifstream src("container.bin", std::ios::binary); // opens the file in binary mode , file is read byte by byte
-	if (!src) {
-		std::cerr << "Error: Cannot open source file. \n";
-		return -1;
-	}
-	vector<string> directories = split(command, '\\');
-	if (isFile) {
-		FileName = directories.back();
-		directories.pop_back();
-	}
-	// we start with parent offset > 
-	vector<uint64_t> offsets;
-
-	Metadata* parentMeta = nullptr;
-	Metadata* childMeta = nullptr;
-	for (const auto& dir : directories) {
-		if (!metadataHashtable.exists(dir)) {
-			cerr << "Error: The path specified doesnt exist!\n";
-			delete parentMeta;
-			delete childMeta;
-			return -1;
-		}
-		uint64_t offset = metadataHashtable.get(dir);
-		src.seekg(offset, ios::beg);
-		childMeta = Metadata::deserialize(src);
-		if (parentMeta != nullptr) {
-			bool isPart = false;
-			for (const auto& off : parentMeta->children) {
-				if (off == childMeta->offset) {
-					isPart = true;
-					break;
-				}
-			}
-			if (!isPart) {
-				cerr << "Error: " << dir << " is not a valid child of its parent\n";
-				delete parentMeta;
-				delete childMeta;
-				return -1;
-
-			}
-		}
-		
-		offsets.push_back(offset);
-		delete parentMeta; // free prvious parent
-		parentMeta = childMeta; // current child becomes the new parent
-		childMeta = nullptr; // reset childmeta
-	}
-	delete parentMeta;
-	return offsets[offsets.size() - 1];
-}
+// first problem : when the command is only bb.txt, for cpin we just need to see if the specified path exists if there is one or it doesnt 
+//uint64_t findDestName(const char* user_dirs, string& action) {
+//	std::ifstream src("container.bin", std::ios::binary); // opens the file in binary mode , file is read byte by byte
+//	if (!src) {
+//		std::cerr << "Error: Cannot open source file. \n";
+//		return -1;
+//	}
+//	vector<string> directories = split(user_dirs, '\\');
+//	if (action == "cpin") { // for cpin we only need to see if the actual path exist or not 
+//
+//	}
+//	
+//	// we start with parent offset > 
+//	vector<uint64_t> offsets;
+//
+//	Metadata* parentMeta = nullptr;
+//	Metadata* childMeta = nullptr;
+//	// Here basically we are checking if the path specified exitsts 
+//	for (const auto& dir : directories) {
+//		if (!metadataHashtable.exists(dir)) {
+//			cerr << "Error: The path specified doesnt exist!\n";
+//			delete parentMeta;
+//			delete childMeta;
+//			return -1;
+//		}
+//		uint64_t offset = metadataHashtable.get(dir);
+//		src.seekg(offset, ios::beg);
+//		childMeta = Metadata::deserialize(src);
+//		if (parentMeta != nullptr) {
+//			bool isPart = false;
+//			for (const auto& off : parentMeta->children) {
+//				if (off == childMeta->offset) {
+//					isPart = true;
+//					break;
+//				}
+//			}
+//			if (!isPart) {
+//				cerr << "Error: " << dir << " is not a valid child of its parent\n";
+//				delete parentMeta;
+//				delete childMeta;
+//				return -1;
+//
+//			}
+//		}
+//		
+//		offsets.push_back(offset);
+//		delete parentMeta; // free prvious parent
+//		parentMeta = childMeta; // current child becomes the new parent
+//		childMeta = nullptr; // reset childmeta
+//	}
+//	delete parentMeta;
+//	return offsets[offsets.size() - 1];
+//}
 
 void InitializeContainer(string& containerPath);
+void md(string& containerPath, string& directoryName);
 
 
 int main(int argc, char* argv[]) {
@@ -329,10 +347,14 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}*/
 	string fileSystem = "container.bin";
+	string newDir = "Desktop";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
 	string fileName = "bbb.txt";
 	InitializeContainer(fileSystem);
-	string command = "cpin";
+	string command = "md";
+	if (command == "md") {
+		md(fileSystem, newDir);
+	}
 	if (command == "cpin") {
 		cpin(outfile, fileName, 4096);
 	}
@@ -385,12 +407,13 @@ std::vector<uint64_t> allocatedContiguosBlocks(size_t requiredBlocks, size_t blo
 }
 
 void deleteFile(string& fileName) {
-	string actual_fileName;
+	/*string actual_fileName;
 	uint64_t parent_offset = findDestName(fileName.c_str(), actual_fileName);
 	if (parent_offset == -1) {
 		return;
 	}
-	fileName = actual_fileName;
+	fileName = actual_fileName;*/
+	uint64_t parent_offset = 12;
 
 	if(!metadataHashtable.exists(fileName)){
 		std::cerr << "Error: file " << fileName << " not found in the container" << endl;
@@ -459,14 +482,14 @@ void InitializeContainer(string& containerPath) {
 	strncpy_s(rootDir.name, "/", sizeof(rootDir.name));
 	rootDir.isDirectory = true;
 	rootDir.size = 0;
-	rootDir.parent = 0; // Root has no parent
+	rootDir.parent = -1; // Root has no parent
 	rootDir.isDeleted = false;
 
 	rootDir.offset = 0;
-
+	container.seekp(rootDir.offset, ios::beg);
 	// Write the root directory metadata to the container
 	rootDir.serialize(container);
-	metadataHashtable.insert("/", 0);
+	metadataHashtable.insert("/", rootDir.offset);
 
 	cout << "Container initialized with root directory.\n";
 
@@ -475,11 +498,12 @@ void InitializeContainer(string& containerPath) {
 
 void ls(const char* command) {
 	// we need to find the offset of the dir that we want to ls 
-	string fileName;
+	/*string fileName;
 	uint64_t last_offset = findDestName(command, fileName, false);
 	if (last_offset == -1) {
 		return;
-	}
+	}*/
+	uint64_t last_offset = 12;
 	std::ifstream container("container.bin", std::ios::binary);
 	if (!container) {
 		std::cerr << "Error: Cannot open container.\n";
@@ -535,6 +559,7 @@ void printMeta(const string& filePath, uint64_t offset) {
 	}
 	file.seekg(offset, ios::beg);
 	Metadata* meta = Metadata::deserialize(file);
+	cout << "Parent meta name is  " << meta->name << " and size of the file or direcotry is " << meta->size << endl;
 	if (meta->isDirectory) {
 		for (const auto& child_offset : meta->children) {
 			file.seekg(child_offset, ios::beg);
@@ -555,12 +580,13 @@ void printMeta(const string& filePath, uint64_t offset) {
 
 // TASK: WHEN A  FILE GET DELETED EVERY BLOCK HAS ITS OWN BLOCK META, SO I NEED TO CONSIDER THIS 
 void cpout(const string& containerPath, string fileName, const string outputPath) {
-	string actualFile;
+	/*string actualFile;
 	uint64_t parent_offset = findDestName(fileName.c_str(), actualFile);
 	if (parent_offset == -1) {
 		return;
 	}
-	fileName = actualFile;
+	fileName = actualFile;*/
+	uint64_t parent_offset = 12;
 
 
 	ifstream container(containerPath, ios::binary);
@@ -613,19 +639,93 @@ void cpout(const string& containerPath, string fileName, const string outputPath
 
 }
 
-void cpin(string& sourcePath, string& destName, size_t blockSize) {
-	string fileName;
-	uint64_t dir_offset = findDestName(destName.c_str(), fileName);
-	if (dir_offset == -1) {
-		return;
+bool hasExtention(const string& fileName) {
+	// Initialize variables to track the position of the last dot
+	int dotPosition = -1;
+	int length = 0;
+
+	// Calculate the length of the string manually
+	while (fileName[length] != '\0') {
+		length++;
 	}
-	destName = fileName;
+	// Iterate through the string to find the last dot
+	for (int i = 0; i < length; ++i) {
+		if (fileName[i] == '.') {
+			dotPosition = i; // Update the pos opf the last dot
+		}
+	}
+	// Check if a valid dot exitsts and it's not at the end or beginning
+	return (dotPosition != -1 && dotPosition != 0 && dotPosition != length - 1);
+}
+
+void cpin(string& sourcePath, string& destName, size_t blockSize) {
 	std::ifstream src(sourcePath, std::ios::binary); // opens the file in binary mode , file is read byte by byte
 	if (!src) {
 		std::cerr << "Error: Cannot open source file. \n";
 		return;
 	}
+	Metadata* parentMeta = nullptr;
+	Metadata* childMeta = nullptr;
+	// Here basically we are checking if the path specified exitsts 
+	vector<string> directories = split(destName.c_str(), '\\');
+	vector<uint64_t> offsets;
+	uint64_t parent_offset;
+	if (directories.size() > 1 && hasExtention(directories.back())) {
+		for (const auto& dir : directories) {
+			// we need to check also if the dir is some of the first because the last doesnt exist;
+			if (!metadataHashtable.exists(dir) && directories.back() == dir) {
+				delete parentMeta;
+				delete childMeta;
+				break;
+			}
+			else if (!metadataHashtable.exists(dir) && directories.back() != dir) {
+				cerr << "Error: path doesnt exits\n";
+				delete parentMeta;
+				delete childMeta;
+				return;
+			}
+			else if (metadataHashtable.exists(dir) && directories.back() == dir) {
+				cerr << "Error: file with the same name already exits in the directory, please choose a different one\n";
+				delete parentMeta;
+				delete childMeta;
+				return;
+			}
+			uint64_t offset = metadataHashtable.get(dir);
+			src.seekg(offset, ios::beg);
+			childMeta = Metadata::deserialize(src);
+			if (parentMeta != nullptr) {
+				bool isPart = false;
+				for (const auto& off : parentMeta->children) {
+					if (off == childMeta->offset) {
+						isPart = true;
+						break;
+					}
+				}
+				if (!isPart) {
+					cerr << "Error: " << dir << " is not a valid child of its parent\n";
+					delete parentMeta;
+					delete childMeta;
+					return;
 
+				}
+			}
+			offsets.push_back(offset);
+			delete parentMeta; // free prvious parent
+			parentMeta = childMeta; // current child becomes the new parent
+			childMeta = nullptr; // reset childmeta
+		}
+		delete parentMeta;
+		parent_offset = offsets.back();
+	}
+	else if(directories.size() == 1 && hasExtention(directories.back())) {
+		parent_offset = currentDirectoryOffset;
+	}
+	else {
+		return;
+	}
+	
+	// checking if the path exist
+	
 
 	std::ofstream container("container.bin", std::ios::binary | std::ios::app);
 	if (!container) {
@@ -639,7 +739,7 @@ void cpin(string& sourcePath, string& destName, size_t blockSize) {
 	fileMeta.isDirectory = false;
 	fileMeta.isDeleted = false;
 	fileMeta.size = 0;
-	fileMeta.parent = dir_offset;
+	fileMeta.parent = parent_offset;
 
 
 	// Get the file size 
@@ -710,21 +810,88 @@ void cpin(string& sourcePath, string& destName, size_t blockSize) {
 
 	printMeta(sourcePath,fileMeta.offset);
 
+	// we need to update parent meta children
+	src.seekg(parent_offset, ios::beg);
+	Metadata* parent = Metadata::deserialize(src);
+	parent->children.push_back(fileMeta.offset);
+	container.seekp(parent_offset,ios::beg);
+	parent->serialize(container);
+	delete parent;
+
+
+
 	// Write metadata to the container 
 	cout << "File copied to container.\n";
 }
 
+// when making a directory we have two options: 1. it is a single directory to make in the current dir (the same as cpin but whithout the extetion check (because its dir)) 
 void md(string& containerPath, string& directoryName) {
-	string directory;
-	uint64_t parent_offset = findDestName(directoryName.c_str(), directory);
-	if (parent_offset == -1) {
-		return;
-	}
-	directoryName = directory;
+	
 
 	ifstream container(containerPath, ios::binary | ios::in);
 	if (!container) {
 		cerr << "Error: Cannot open container.\n";
+		return;
+	}
+	Metadata* parentMeta = nullptr;
+	Metadata* childMeta = nullptr;
+	// Here basically we are checking if the path specified exitsts 
+	vector<string> directories = split(directoryName.c_str(), '\\');
+	vector<uint64_t> offsets;
+	uint64_t parent_offset;
+
+	if (directories.size() > 1 && !hasExtention(directories.back())) {
+		for (const auto& dir : directories) {
+			// we need to check also if the dir is some of the first because the last doesnt exist;
+			if (!metadataHashtable.exists(dir) && directories.back() == dir) {
+				delete parentMeta;
+				delete childMeta;
+				break;
+			}
+			else if (!metadataHashtable.exists(dir) && directories.back() != dir) {
+				cerr << "Error: path doesnt exits\n";
+				delete parentMeta;
+				delete childMeta;
+				return;
+			}
+			else if(metadataHashtable.exists(dir) && directories.back() == dir){
+				cerr << "Error: directory with the same name already exits in the directory, please choose a different one\n";
+				delete parentMeta;
+				delete childMeta;
+				return;
+			}
+			uint64_t offset = metadataHashtable.get(dir);
+			container.seekg(offset, ios::beg);
+			childMeta = Metadata::deserialize(container);
+			if (parentMeta != nullptr) {
+				bool isPart = false;
+				for (const auto& off : parentMeta->children) {
+					if (off == childMeta->offset) {
+						isPart = true;
+						break;
+					}
+				}
+				if (!isPart) {
+					cerr << "Error: " << dir << " is not a valid child of its parent\n";
+					delete parentMeta;
+					delete childMeta;
+					return;
+
+				}
+			}
+			offsets.push_back(offset);
+			delete parentMeta; // free prvious parent
+			parentMeta = childMeta; // current child becomes the new parent
+			childMeta = nullptr; // reset childmeta
+		}
+		delete parentMeta;
+		parent_offset = offsets.back();
+		directoryName = directories.back();
+	}
+	else if (directories.size() == 1 && !hasExtention(directories.back())) {
+		parent_offset = currentDirectoryOffset;
+	}
+	else {
 		return;
 	}
 	ofstream containerWrite(containerPath, ios::binary | ios::in);
@@ -733,20 +900,8 @@ void md(string& containerPath, string& directoryName) {
 		return;
 	}
 
-	container.seekg(currentDirectoryOffset, ios::beg);
+	container.seekg(parent_offset, ios::beg);
 	Metadata* currentMeta = Metadata::deserialize(container);
-
-	// Check if a child with the same name already exist
-	for (const auto& childOffset: currentMeta->children) {
-		container.seekg(childOffset, ios::beg);
-		Metadata* childMeta = Metadata::deserialize(container);
-		if (string(childMeta->name) == directoryName && !childMeta->isDeleted) {
-			cerr << "Error: Didrectory with thes ame name already exists.\n";
-			delete childMeta;
-			return;
-		}
-		delete childMeta;
-	}
 
 	// Create new directory metadata
 	Metadata* newDirMeta = new Metadata();
@@ -769,21 +924,22 @@ void md(string& containerPath, string& directoryName) {
 
 	// Update current direcotry metadata wioth the new child
 	currentMeta->children.push_back(newdirOffset);
-	containerWrite.seekp(currentDirectoryOffset, ios::beg);
+	containerWrite.seekp(parent_offset, ios::beg);
 	currentMeta->serialize(containerWrite);
 
 	cout << "Directory " << directoryName << " created successfully\n";
-
+	printMeta(containerPath, newdirOffset);
 }
 
 // 2 options - cd Home\user\soemwhere or cd Home
 void cd(string& containerPath, string& directoryName) {
-	string directory;
+	/*string directory;
 	uint64_t parent_offset = findDestName(directoryName.c_str(), directory);
 	if (parent_offset == -1) {
 		return;
 	}
-	directoryName = directory;
+	directoryName = directory;*/
+	uint64_t parent_offset = 12;
 	ifstream container(containerPath, ios::binary);
 	if (!container) {
 		cerr << "Error: Cannot open container.\n";
@@ -854,13 +1010,13 @@ void DeleteDir(ifstream& containerRead, ofstream& containerWrite,Metadata* curre
 // 2 options rd Folderaa or rd Home\Folderaaa
 void rd(string& containerPath, string& dirName) {
 	// delete a folder in current directory, if there are other files or directories in that, thy are also deleted
-	string dir;
+	/*string dir;
 	uint64_t parent_offset = findDestName(dirName.c_str(), dir);
 	if (parent_offset == -1) {
 		return;
 	}
-	dirName = dir;
-
+	dirName = dir;*/
+	uint64_t parent_offset = 12;
 	ifstream containerRead(containerPath, ios::binary);
 	if (!containerRead) {
 		cerr << "Error: Cannot open container.\n";
