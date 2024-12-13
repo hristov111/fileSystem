@@ -7,6 +7,119 @@
 #include <string>
 #include <functional> 
 
+class ResourceManager {
+private:
+	vector<uint64_t> freeBlocks;
+	vector<uint64_t> freeMeta;
+	HashTable blockHashTable;
+	HashTable metadataHashtable;
+	string fileName;
+	uint64_t vec1Offset;
+	uint64_t vec2Offset;
+	uint64_t hash1Offset;
+	uint64_t hash2Offset;
+
+	void serializeVector(vector<uint64_t>& vec, ofstream& out) {
+		if (!out) {
+			throw runtime_error("Error: Output stream is not valid");
+		}
+
+		// Write the size of the vector
+		size_t size = vec.size();
+		out.write(reinterpret_cast<const char*>(&size), sizeof(size));
+
+		// Write the elements of the vector
+		for (const auto& element : vec) {
+			out.write(reinterpret_cast<const char*>(&element), sizeof(element));
+		}
+	}
+
+	vector<uint64_t> deserializeVector(ifstream& in) {
+		if (!in) {
+			throw runtime_error("Error: Input stream is not valid");
+		}
+
+		size_t size;
+		in.read(reinterpret_cast<char*>(&size), sizeof(size));
+
+		vector<uint64_t> vec(size);
+		for (size_t i = 0; i < size; ++i) {
+			in.read(reinterpret_cast<char*>(&vec[i]), sizeof(vec[i]));
+		}
+		return vec;
+	}
+
+public:
+	ResourceManager(const string& file) : fileName(file) {
+		ifstream in(fileName, ios::binary);
+		if (!in) {
+			throw runtime_error("Error: Cannot open file for reading\n");
+		}
+
+		in.read(reinterpret_cast<char*>(vec1Offset), sizeof(vec1Offset));
+		in.read(reinterpret_cast<char*>(vec2Offset), sizeof(vec2Offset));
+
+		in.read(reinterpret_cast<char*>(hash1Offset), sizeof(hash1Offset));
+
+		in.read(reinterpret_cast<char*>(hash2Offset), sizeof(hash2Offset));
+
+		in.seekg(vec1Offset, ios::beg);
+		freeBlocks = deserializeVector(in);
+
+		in.seekg(vec2Offset, ios::beg);
+		freeMeta = deserializeVector(in);
+
+		in.seekg(hash1Offset, ios::beg);
+		blockHashTable.deserialize(in);
+
+		in.seekg(hash2Offset, ios::beg);
+		metadataHashtable.deserialize(in);
+
+
+
+
+	}
+	~ResourceManager() {
+		// Serialize data when the program ends
+		ofstream out(fileName, ios::binary);
+		if (!out) {
+			throw runtime_error("Error: Cannot open file for writing\n");
+		}
+		out.write(reinterpret_cast<const char*>(vec1Offset), sizeof(vec1Offset));
+		out.write(reinterpret_cast<const char*>(vec2Offset), sizeof(vec2Offset));
+
+		out.write(reinterpret_cast<const char*>(hash1Offset), sizeof(hash1Offset));
+
+		out.write(reinterpret_cast<const char*>(hash2Offset), sizeof(hash2Offset));
+
+		//Write vector 1
+		vec1Offset = out.tellp();
+		serializeVector(freeBlocks, out);
+
+		// Write vector 2
+		vec2Offset = out.tellp();
+		serializeVector(freeMeta, out);
+
+		// Write HaSh table 1
+		hash1Offset = out.tellp();
+		blockHashTable.serialize(out);
+
+		// Write hash table 2
+		hash2Offset = out.tellp();
+		metadataHashtable.serialize(out);
+
+		out.seekp(0,ios::beg);
+		out.write(reinterpret_cast<const char*>(vec1Offset), sizeof(vec1Offset));
+		out.write(reinterpret_cast<const char*>(vec2Offset), sizeof(vec2Offset));
+
+		out.write(reinterpret_cast<const char*>(hash1Offset), sizeof(hash1Offset));
+
+		out.write(reinterpret_cast<const char*>(hash2Offset), sizeof(hash2Offset));
+
+	}
+
+};
+
 using namespace std;
 class HashTable {
 private:
@@ -81,10 +194,67 @@ public:
 			}
 		}
 	}
+
+	void serialize(ofstream& out) const {
+		if (!out) {
+			throw runtime_error("Error: Output stream is not valid.");
+		}
+
+		size_t totalCount = 0;
+		// Count the total number of key-value pairs
+		for (int i = 0; i < TABLE_SIZE; ++i) {
+			totalCount += table[i].size();
+		}
+
+		out.write(reinterpret_cast<const char*>(&totalCount), sizeof(totalCount));
+
+		// Write each key-value pair
+		for (int i = 0; i < TABLE_SIZE; ++i) {
+			for (const auto& kv : table[i]) {
+				size_t keyLength = kv.first.size();
+				out.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
+				out.write(kv.first.data(), keyLength);
+				out.write(reinterpret_cast<const char*>(&kv.second), sizeof(kv.second));
+			}
+		}
+	}
+
+	void deserialize(ifstream& in) {
+		if (!in) {
+			throw runtime_error("Error: Input stream is not valid");
+		}
+
+		// Clear the current hash table
+		for (int i = 0; i < TABLE_SIZE; ++i) {
+			table[i].clear();
+		}
+
+		size_t totalCount;
+		// Read the total cout ovchar* key-value pairs
+		in.read(reinterpret_cast<char*>(&totalCount), sizeof(totalCount));
+
+		// Read each key value pair
+		for (size_t i = 0; i < totalCount; ++i) {
+			size_t keyLength;
+			in.read(reinterpret_cast<char*>(&keyLength), sizeof(keyLength));
+
+			string key(keyLength, '\0');
+			in.read(&key[0], keyLength);
+
+			uint64_t value;
+			in.read(reinterpret_cast<char*>(&value), sizeof(value));
+
+			//Inser the key-value pair into the hash table
+
+			insert(key, value);
+		}
+
+	}
 };
 
-HashTable blockHashTable;
-HashTable metadataHashtable;
+
+
+
 
 // deduplication ?
 // Deduplication is a technique used to 
@@ -217,9 +387,6 @@ struct Metadata {
 		in.read(reinterpret_cast<char*>(&metadata->isDeleted), sizeof(metadata->isDeleted));
 
 
-		size_t blockKeycount;
-		in.read(reinterpret_cast<char*>(&blockKeycount), sizeof(blockKeycount));
-
 		// Read each string in the vector
 		  // Deserialize the keys vector
 		size_t blockKeyCount;
@@ -347,7 +514,7 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}*/
 	string fileSystem = "container.bin";
-	string newDir = "Desktop";
+	string newDir = "Desktop\\Hello1";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
 	string fileName = "bbb.txt";
 	InitializeContainer(fileSystem);
@@ -367,8 +534,6 @@ int main(int argc, char* argv[]) {
 
 	return 0;
 }
-vector<uint64_t> freeBlocks;
-vector<uint64_t> freeMeta;
 
 void InsertionSort(vector<uint64_t>& array) {
 	size_t len = array.size();
