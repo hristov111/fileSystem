@@ -85,13 +85,8 @@ public:
 		if (!out) {
 			throw runtime_error("Error: Cannot open file for writing\n");
 		}
-		out.write(reinterpret_cast<const char*>(vec1Offset), sizeof(vec1Offset));
-		out.write(reinterpret_cast<const char*>(vec2Offset), sizeof(vec2Offset));
-
-		out.write(reinterpret_cast<const char*>(hash1Offset), sizeof(hash1Offset));
-
-		out.write(reinterpret_cast<const char*>(hash2Offset), sizeof(hash2Offset));
-
+	
+		out.seekp(0, ios::end); // Move to the end of the file
 		//Write vector 1
 		vec1Offset = out.tellp();
 		serializeVector(freeBlocks, out);
@@ -108,14 +103,14 @@ public:
 		hash2Offset = out.tellp();
 		metadataHashtable.serialize(out);
 
-		out.seekp(0,ios::beg);
+		out.seekp(sizeof(Metadata), ios::beg);
 		out.write(reinterpret_cast<const char*>(vec1Offset), sizeof(vec1Offset));
 		out.write(reinterpret_cast<const char*>(vec2Offset), sizeof(vec2Offset));
 
 		out.write(reinterpret_cast<const char*>(hash1Offset), sizeof(hash1Offset));
 
 		out.write(reinterpret_cast<const char*>(hash2Offset), sizeof(hash2Offset));
-
+		out.close();
 	}
 
 };
@@ -518,6 +513,7 @@ int main(int argc, char* argv[]) {
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
 	string fileName = "bbb.txt";
 	InitializeContainer(fileSystem);
+	ResourceManager resource(fileSystem);
 	string command = "md";
 	if (command == "md") {
 		md(fileSystem, newDir);
@@ -655,6 +651,11 @@ void InitializeContainer(string& containerPath) {
 	// Write the root directory metadata to the container
 	rootDir.serialize(container);
 	metadataHashtable.insert("/", rootDir.offset);
+
+	uint64_t placeholder; // reserved for the hashtables and vectors offsets
+	for (size_t i = 0; i < 4; ++i) {
+		container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
+	}
 
 	cout << "Container initialized with root directory.\n";
 
