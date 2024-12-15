@@ -6,116 +6,97 @@
 #include <list>
 #include <string>
 #include <functional> 
+#include <filesystem>
+#include <stdexcept>
 
-class ResourceManager {
-private:
-	vector<uint64_t> freeBlocks;
-	vector<uint64_t> freeMeta;
-	HashTable blockHashTable;
-	HashTable metadataHashtable;
-	string fileName;
-	uint64_t vec1Offset;
-	uint64_t vec2Offset;
-	uint64_t hash1Offset;
-	uint64_t hash2Offset;
 
-	void serializeVector(vector<uint64_t>& vec, ofstream& out) {
-		if (!out) {
-			throw runtime_error("Error: Output stream is not valid");
-		}
+using namespace std;
+struct Metadata {
+	char name[100]; // file or directory name
+	bool isDirectory; // True if it's a directory
+	uint64_t offset; // offset in the container
+	uint64_t size; // size of the file (0 for directories)
+	vector<string> keys; // keys to the hashtable for the blocks
+	vector<uint64_t> children; // offsets of child files or directories 
+	uint64_t parent; // Parent directory's index in the metadata (0 for root)
+	bool isDeleted;
 
-		// Write the size of the vector
-		size_t size = vec.size();
+	void serialize(std::ofstream& out) {
+		out.write(name, sizeof(name));
+		out.write(reinterpret_cast<const char*>(&isDirectory), sizeof(isDirectory));
+		out.write(reinterpret_cast<const char*>(&offset), sizeof(offset));
 		out.write(reinterpret_cast<const char*>(&size), sizeof(size));
+		out.write(reinterpret_cast<const char*>(&parent), sizeof(parent));
+		out.write(reinterpret_cast<const char*>(&isDeleted), sizeof(isDeleted));
 
-		// Write the elements of the vector
-		for (const auto& element : vec) {
-			out.write(reinterpret_cast<const char*>(&element), sizeof(element));
+
+		// Write= the size of the vector
+		size_t blockKeyCount = keys.size();
+		out.write(reinterpret_cast<const char*>(&blockKeyCount), sizeof(blockKeyCount));
+
+		// Write each string in the vectopr
+		for (const auto& key : keys) {
+			size_t keyLength = key.size();
+			out.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
+			out.write(key.data(), keyLength);
 		}
-	}
+		size_t children_count = children.size();
+		out.write(reinterpret_cast<const char*>(&children_count), sizeof(children_count));
 
-	vector<uint64_t> deserializeVector(ifstream& in) {
-		if (!in) {
-			throw runtime_error("Error: Input stream is not valid");
+		for (const auto& child : children) {
+			out.write(reinterpret_cast<const char*>(&child), sizeof(child));
 		}
-
-		size_t size;
-		in.read(reinterpret_cast<char*>(&size), sizeof(size));
-
-		vector<uint64_t> vec(size);
-		for (size_t i = 0; i < size; ++i) {
-			in.read(reinterpret_cast<char*>(&vec[i]), sizeof(vec[i]));
-		}
-		return vec;
-	}
-
-public:
-	ResourceManager(const string& file) : fileName(file) {
-		ifstream in(fileName, ios::binary);
-		if (!in) {
-			throw runtime_error("Error: Cannot open file for reading\n");
-		}
-
-		in.read(reinterpret_cast<char*>(vec1Offset), sizeof(vec1Offset));
-		in.read(reinterpret_cast<char*>(vec2Offset), sizeof(vec2Offset));
-
-		in.read(reinterpret_cast<char*>(hash1Offset), sizeof(hash1Offset));
-
-		in.read(reinterpret_cast<char*>(hash2Offset), sizeof(hash2Offset));
-
-		in.seekg(vec1Offset, ios::beg);
-		freeBlocks = deserializeVector(in);
-
-		in.seekg(vec2Offset, ios::beg);
-		freeMeta = deserializeVector(in);
-
-		in.seekg(hash1Offset, ios::beg);
-		blockHashTable.deserialize(in);
-
-		in.seekg(hash2Offset, ios::beg);
-		metadataHashtable.deserialize(in);
 
 
 
 
 	}
-	~ResourceManager() {
-		// Serialize data when the program ends
-		ofstream out(fileName, ios::binary);
-		if (!out) {
-			throw runtime_error("Error: Cannot open file for writing\n");
+
+	static Metadata* deserialize(std::ifstream& in) {
+		Metadata* metadata = new Metadata();
+
+		// Read fixed size fields
+		in.read(metadata->name, sizeof(metadata->name));
+		in.read(reinterpret_cast<char*>(&metadata->isDirectory), sizeof(metadata->isDirectory));
+		in.read(reinterpret_cast<char*>(&metadata->offset), sizeof(metadata->offset));
+		in.read(reinterpret_cast<char*>(&metadata->size), sizeof(metadata->size));
+		in.read(reinterpret_cast<char*>(&metadata->parent), sizeof(metadata->parent));
+		in.read(reinterpret_cast<char*>(&metadata->isDeleted), sizeof(metadata->isDeleted));
+
+
+		// Read each string in the vector
+		  // Deserialize the keys vector
+		size_t blockKeyCount;
+		in.read(reinterpret_cast<char*>(&blockKeyCount), sizeof(blockKeyCount));
+		if (blockKeyCount > 0) {
+			metadata->keys.resize(blockKeyCount);
+			for (size_t i = 0; i < blockKeyCount; ++i) {
+				size_t keyLength;
+				in.read(reinterpret_cast<char*>(&keyLength), sizeof(keyLength));
+				if (keyLength > 0) {
+					metadata->keys[i].resize(keyLength);
+					in.read(&metadata->keys[i][0], keyLength);
+				}
+			}
 		}
-	
-		out.seekp(0, ios::end); // Move to the end of the file
-		//Write vector 1
-		vec1Offset = out.tellp();
-		serializeVector(freeBlocks, out);
 
-		// Write vector 2
-		vec2Offset = out.tellp();
-		serializeVector(freeMeta, out);
+		// Deserialize the children vector
+		size_t childrenCount;
+		in.read(reinterpret_cast<char*>(&childrenCount), sizeof(childrenCount));
+		if (childrenCount > 0) {
+			metadata->children.resize(childrenCount);
+			for (size_t i = 0; i < childrenCount; ++i) {
+				in.read(reinterpret_cast<char*>(&metadata->children[i]), sizeof(metadata->children[i]));
+			}
+		}
 
-		// Write HaSh table 1
-		hash1Offset = out.tellp();
-		blockHashTable.serialize(out);
+		return metadata;
 
-		// Write hash table 2
-		hash2Offset = out.tellp();
-		metadataHashtable.serialize(out);
 
-		out.seekp(sizeof(Metadata), ios::beg);
-		out.write(reinterpret_cast<const char*>(vec1Offset), sizeof(vec1Offset));
-		out.write(reinterpret_cast<const char*>(vec2Offset), sizeof(vec2Offset));
-
-		out.write(reinterpret_cast<const char*>(hash1Offset), sizeof(hash1Offset));
-
-		out.write(reinterpret_cast<const char*>(hash2Offset), sizeof(hash2Offset));
-		out.close();
 	}
 
 };
 
-using namespace std;
 class HashTable {
 private:
 	static const int TABLE_SIZE = 100;
@@ -246,22 +227,143 @@ public:
 
 	}
 };
+class ResourceManager {
+private:
+	vector<uint64_t> freeBlocks;
+	vector<uint64_t> freeMeta;
+	HashTable blockHashTable;
+	HashTable metadataHashtable;
+	string fileName;
+	uint64_t vec1Offset = 0;
+	uint64_t vec2Offset = 0;
+	uint64_t hash1Offset = 0;
+	uint64_t hash2Offset = 0;
+
+	void serializeVector(vector<uint64_t>& vec, ofstream& out) {
+		if (!out) {
+			throw runtime_error("Error: Output stream is not valid");
+		}
+
+		// Write the size of the vector
+		size_t size = vec.size();
+		out.write(reinterpret_cast<const char*>(&size), sizeof(size));
+
+		// Write the elements of the vector
+		for (const auto& element : vec) {
+			out.write(reinterpret_cast<const char*>(&element), sizeof(element));
+		}
+	}
+
+	vector<uint64_t> deserializeVector(ifstream& in) {
+		if (!in) {
+			throw runtime_error("Error: Input stream is not valid");
+		}
+
+		size_t size;
+		in.read(reinterpret_cast<char*>(&size), sizeof(size));
+
+		vector<uint64_t> vec(size);
+		for (size_t i = 0; i < size; ++i) {
+			in.read(reinterpret_cast<char*>(&vec[i]), sizeof(vec[i]));
+		}
+		return vec;
+	}
+
+public:
+	ResourceManager(const string& file) : fileName(file) {
+		ifstream in(fileName, ios::binary | ios::in);
+		if (!in) {
+			ofstream out(fileName, ios::binary | ios::out);
+			if (!out) {
+				throw runtime_error("Error: Cannot create file.\n");
+			}
+		}
+
+		in.seekg(sizeof(Metadata), ios::beg);
+
+		in.read(reinterpret_cast<char*>(&vec1Offset), sizeof(&vec1Offset));
+		in.read(reinterpret_cast<char*>(&vec2Offset), sizeof(&vec2Offset));
+
+		in.read(reinterpret_cast<char*>(&hash1Offset), sizeof(&hash1Offset));
+
+		in.read(reinterpret_cast<char*>(&hash2Offset), sizeof(&hash2Offset));
+
+		if (vec1Offset != 0) {
+			in.seekg(vec1Offset, ios::beg);
+			freeBlocks = deserializeVector(in);
+		}
+		if (vec2Offset != 0) {
+			in.seekg(vec2Offset, ios::beg);
+			freeMeta = deserializeVector(in);
+		}
+
+		if (hash1Offset != 0) {
+			in.seekg(hash1Offset, ios::beg);
+			blockHashTable.deserialize(in);
+		}
+
+		if (hash2Offset != 0) {
+			in.seekg(hash2Offset, ios::beg);
+			metadataHashtable.deserialize(in);
+		}
 
 
 
 
+	}
 
-// deduplication ?
-// Deduplication is a technique used to 
-// eliminate duplicate copies of data in 
-// storage systems. Instead of storing the 
-// same data multiple times, deduplication ensures
-// that identical blocks of data are stored only once 
-// and reused wherever necessary. This can save a significant 
-//  
-// that share similar content (e.g., backups, images, or duplicate fmount of storage space, especially when dealing with large filesiles).
 
-//  metaData strucutre
+	vector<uint64_t>& getFreeblocks() {
+		return freeBlocks;
+	}
+	vector<uint64_t>& getFreeMeta() {
+		return freeMeta;
+	}
+
+	HashTable& getBlockHashTable() {
+		return blockHashTable;
+	}
+	HashTable& getMetadataHashTable() {
+		return metadataHashtable;
+	}
+
+	
+
+	~ResourceManager() {
+		// Serialize data when the program ends
+		ofstream out(fileName, ios::binary | ios::in | ios::out);
+		if (!out) {
+			throw runtime_error("Error: Cannot open file for writing\n");
+		}
+	
+		out.seekp(0, ios::end); // Move to the end of the file
+		//Write vector 1
+		vec1Offset = out.tellp();
+		serializeVector(freeBlocks, out);
+
+		// Write vector 2
+		vec2Offset = out.tellp();
+		serializeVector(freeMeta, out);
+
+		// Write HaSh table 1
+		hash1Offset = out.tellp();
+		blockHashTable.serialize(out);
+
+		// Write hash table 2
+		hash2Offset = out.tellp();
+		metadataHashtable.serialize(out);
+
+		out.seekp(sizeof(Metadata), ios::beg);
+		out.write(reinterpret_cast<const char*>(&vec1Offset), sizeof(&vec1Offset));
+		out.write(reinterpret_cast<const char*>(&vec2Offset), sizeof(&vec2Offset));
+
+		out.write(reinterpret_cast<const char*>(&hash1Offset), sizeof(&hash1Offset));
+
+		out.write(reinterpret_cast<const char*>(&hash2Offset), sizeof(&hash2Offset));
+		out.close();
+	}
+
+};
 
 uint64_t currentDirectoryOffset = 0;
 
@@ -329,94 +431,8 @@ struct Block {
 	}
 
 };
-struct Metadata {
-	char name[100]; // file or directory name
-	bool isDirectory; // True if it's a directory
-	uint64_t offset; // offset in the container
-	uint64_t size; // size of the file (0 for directories)
-	vector<string> keys; // keys to the hashtable for the blocks
-	vector<uint64_t> children; // offsets of child files or directories 
-	uint64_t parent; // Parent directory's index in the metadata (0 for root)
-	bool isDeleted;
-
-	void serialize(std::ofstream& out) {
-		out.write(name, sizeof(name));
-		out.write(reinterpret_cast<const char*>(&isDirectory), sizeof(isDirectory));
-		out.write(reinterpret_cast<const char*>(&offset), sizeof(offset));
-		out.write(reinterpret_cast<const char*>(&size), sizeof(size));
-		out.write(reinterpret_cast<const char*>(&parent), sizeof(parent));
-		out.write(reinterpret_cast<const char*>(&isDeleted), sizeof(isDeleted));
 
 
-		// Write= the size of the vector
-		size_t blockKeyCount = keys.size();
-		out.write(reinterpret_cast<const char*>(&blockKeyCount), sizeof(blockKeyCount));
-
-		// Write each string in the vectopr
-		for (const auto& key : keys) {
-			size_t keyLength = key.size();
-			out.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
-			out.write(key.data(), keyLength);
-		}
-		size_t children_count = children.size();
-		out.write(reinterpret_cast<const char*>(&children_count), sizeof(children_count));
-		
-		for (const auto& child : children) {
-			out.write(reinterpret_cast<const char*>(&child), sizeof(child));
-		}
-
-
-
-
-	}
-
-	static Metadata* deserialize(std::ifstream& in) {
-		Metadata* metadata = new Metadata();
-
-		// Read fixed size fields
-		in.read(metadata->name, sizeof(metadata->name));
-		in.read(reinterpret_cast<char*>(&metadata->isDirectory), sizeof(metadata->isDirectory));
-		in.read(reinterpret_cast<char*>(&metadata->offset), sizeof(metadata->offset));
-		in.read(reinterpret_cast<char*>(&metadata->size), sizeof(metadata->size));
-		in.read(reinterpret_cast<char*>(&metadata->parent), sizeof(metadata->parent));
-		in.read(reinterpret_cast<char*>(&metadata->isDeleted), sizeof(metadata->isDeleted));
-
-
-		// Read each string in the vector
-		  // Deserialize the keys vector
-		size_t blockKeyCount;
-		in.read(reinterpret_cast<char*>(&blockKeyCount), sizeof(blockKeyCount));
-		if (blockKeyCount > 0) {
-			metadata->keys.resize(blockKeyCount);
-			for (size_t i = 0; i < blockKeyCount; ++i) {
-				size_t keyLength;
-				in.read(reinterpret_cast<char*>(&keyLength), sizeof(keyLength));
-				if (keyLength > 0) {
-					metadata->keys[i].resize(keyLength);
-					in.read(&metadata->keys[i][0], keyLength);
-				}
-			}
-		}
-
-		// Deserialize the children vector
-		size_t childrenCount;
-		in.read(reinterpret_cast<char*>(&childrenCount), sizeof(childrenCount));
-		if (childrenCount > 0) {
-			metadata->children.resize(childrenCount);
-			for (size_t i = 0; i < childrenCount; ++i) {
-				in.read(reinterpret_cast<char*>(&metadata->children[i]), sizeof(metadata->children[i]));
-			}
-		}
-
-		return metadata;
-
-
-	}
-
-};
-
-void cpin(string& sourcePath, string& destName, size_t blockSize);
-void ls(const char* command);
 
 vector<string> split(const char* str, char delimeter) {
 	vector<string> res;
@@ -445,62 +461,23 @@ vector<string> split(const char* str, char delimeter) {
 
 }
 
-// first problem : when the command is only bb.txt, for cpin we just need to see if the specified path exists if there is one or it doesnt 
-//uint64_t findDestName(const char* user_dirs, string& action) {
-//	std::ifstream src("container.bin", std::ios::binary); // opens the file in binary mode , file is read byte by byte
-//	if (!src) {
-//		std::cerr << "Error: Cannot open source file. \n";
-//		return -1;
-//	}
-//	vector<string> directories = split(user_dirs, '\\');
-//	if (action == "cpin") { // for cpin we only need to see if the actual path exist or not 
-//
-//	}
-//	
-//	// we start with parent offset > 
-//	vector<uint64_t> offsets;
-//
-//	Metadata* parentMeta = nullptr;
-//	Metadata* childMeta = nullptr;
-//	// Here basically we are checking if the path specified exitsts 
-//	for (const auto& dir : directories) {
-//		if (!metadataHashtable.exists(dir)) {
-//			cerr << "Error: The path specified doesnt exist!\n";
-//			delete parentMeta;
-//			delete childMeta;
-//			return -1;
-//		}
-//		uint64_t offset = metadataHashtable.get(dir);
-//		src.seekg(offset, ios::beg);
-//		childMeta = Metadata::deserialize(src);
-//		if (parentMeta != nullptr) {
-//			bool isPart = false;
-//			for (const auto& off : parentMeta->children) {
-//				if (off == childMeta->offset) {
-//					isPart = true;
-//					break;
-//				}
-//			}
-//			if (!isPart) {
-//				cerr << "Error: " << dir << " is not a valid child of its parent\n";
-//				delete parentMeta;
-//				delete childMeta;
-//				return -1;
-//
-//			}
-//		}
-//		
-//		offsets.push_back(offset);
-//		delete parentMeta; // free prvious parent
-//		parentMeta = childMeta; // current child becomes the new parent
-//		childMeta = nullptr; // reset childmeta
-//	}
-//	delete parentMeta;
-//	return offsets[offsets.size() - 1];
-//}
-
-void InitializeContainer(string& containerPath);
-void md(string& containerPath, string& directoryName);
+void cpin(ResourceManager& re, string& sourcePath, string& destName, size_t blockSize);
+void InsertionSort(vector<uint64_t>& array);
+std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
+void deleteFile(ResourceManager& re, string& fileName);
+void InitializeContainer(ResourceManager& re, string& containerPath);
+void ls(ResourceManager& re, const char* command);
+void printBlockAndContent(ResourceManager& re, const string& filePath, uint64_t offset);
+void printMeta(ResourceManager& re, const string& filePath, uint64_t offset);
+void cpout(ResourceManager& re, const string& containerPath, string fileName, const string outputPath);
+bool hasExtention(const string& fileName);
+void cpin(ResourceManager& re, string& sourcePath, string& destName, size_t blockSize);
+void md(ResourceManager& re, string& containerPath, string& directoryName);
+void cd(string& containerPath, string& directoryName);
+void cdDots(string& containerPath);
+void cdRoot(string& containerPath);
+void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite, Metadata* currentMeta);
+void rd(ResourceManager& re, string& containerPath, string& dirName);
 
 
 int main(int argc, char* argv[]) {
@@ -509,17 +486,17 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}*/
 	string fileSystem = "container.bin";
-	string newDir = "Desktop\\Hello1";
+	string newDir = "Home1";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
 	string fileName = "bbb.txt";
-	InitializeContainer(fileSystem);
-	ResourceManager resource(fileSystem);
+	ResourceManager resource("container.bin");
+	InitializeContainer(resource,fileSystem);
 	string command = "md";
 	if (command == "md") {
-		md(fileSystem, newDir);
+		md(resource,fileSystem, newDir);
 	}
 	if (command == "cpin") {
-		cpin(outfile, fileName, 4096);
+		cpin(resource,outfile, fileName, 4096);
 	}
 	//else if (command == "ls") {
 	//	ls();
@@ -545,17 +522,17 @@ void InsertionSort(vector<uint64_t>& array) {
 	}
 }
 
-std::vector<uint64_t> allocatedContiguosBlocks(size_t requiredBlocks, size_t blockSize) {
+std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize) {
 	std::vector<uint64_t> allocatedBlocks;
-	InsertionSort(freeBlocks);
+	InsertionSort(re.getFreeblocks());
 	size_t contiguouscount = 1;
 
-	for (size_t i = 1; i < freeBlocks.size(); ++i) {
-		if (freeBlocks[i] == freeBlocks[i - 1] + blockSize) {
+	for (size_t i = 1; i < re.getFreeblocks().size(); ++i) {
+		if (re.getFreeblocks()[i] == re.getFreeblocks()[i - 1] + blockSize) {
 			++contiguouscount;
 			if (contiguouscount == requiredBlocks) {
-				allocatedBlocks.assign(freeBlocks.begin() + i - requiredBlocks +1, freeBlocks.begin() +i +1);
-				freeBlocks.erase(freeBlocks.begin() + i - requiredBlocks +1, freeBlocks.begin() + i+1);
+				allocatedBlocks.assign(re.getFreeblocks().begin() + i - requiredBlocks +1, re.getFreeblocks().begin() +i +1);
+				re.getFreeblocks().erase(re.getFreeblocks().begin() + i - requiredBlocks +1, re.getFreeblocks().begin() + i+1);
 				return allocatedBlocks;
 			}
 		}
@@ -567,7 +544,7 @@ std::vector<uint64_t> allocatedContiguosBlocks(size_t requiredBlocks, size_t blo
 
 }
 
-void deleteFile(string& fileName) {
+void deleteFile(ResourceManager& re , string& fileName) {
 	/*string actual_fileName;
 	uint64_t parent_offset = findDestName(fileName.c_str(), actual_fileName);
 	if (parent_offset == -1) {
@@ -576,7 +553,7 @@ void deleteFile(string& fileName) {
 	fileName = actual_fileName;*/
 	uint64_t parent_offset = 12;
 
-	if(!metadataHashtable.exists(fileName)){
+	if(!re.getMetadataHashTable().exists(fileName)) {
 		std::cerr << "Error: file " << fileName << " not found in the container" << endl;
 		return;
 	}
@@ -592,7 +569,7 @@ void deleteFile(string& fileName) {
 	}
 
 	// Read an process	the container file
-	uint64_t offset = metadataHashtable.get(fileName);
+	uint64_t offset = re.getMetadataHashTable().get(fileName);
 
 	// remove the meta from parent children
 	container.seekg(parent_offset, ios::beg);
@@ -614,9 +591,9 @@ void deleteFile(string& fileName) {
 	// delete all blocks assosiated with the meta file 
 	for (string key: fileMeta->keys) {
 		// firstly add all the blocks to a list of reusable blocks
-		freeBlocks.push_back(blockHashTable.get(key)); // getting the offset of the actual block, that will lead to the content of the block
+		re.getFreeblocks().push_back(re.getBlockHashTable().get(key)); // getting the offset of the actual block, that will lead to the content of the block
 		// remove the block from hashtable
-		blockHashTable.remove(key); // remove the key from the block hash table 
+		re.getBlockHashTable().remove(key); // remove the key from the block hash table 
 	}
 	// clear the list
 	fileMeta->keys.clear(); 
@@ -625,15 +602,22 @@ void deleteFile(string& fileName) {
 	containerWrite.seekp(offset, ios::beg);
 	fileMeta->serialize(containerWrite);
 	// add it to the free meta file
-	freeMeta.push_back(offset);
+	re.getFreeMeta().push_back(offset);
 
 	string s(fileMeta->name);
-	metadataHashtable.remove(s);
+	re.getMetadataHashTable().remove(s);
 	delete fileMeta;
 }
 
-void InitializeContainer(string& containerPath) {
-	ofstream container(containerPath, ios::binary | ios::trunc);
+void InitializeContainer(ResourceManager& re,string& containerPath) {
+	ifstream file(containerPath, ios::binary | ios::in );
+	if (file && file.tellg()> 0) {
+		cout << "container already exists and has data.\n";
+		return;
+	}
+	file.close();
+
+	ofstream container(containerPath, ios::binary | ios::out);
 	if (!container) {
 		cerr << "Error: Cannot create container.\n";
 		return;
@@ -650,19 +634,19 @@ void InitializeContainer(string& containerPath) {
 	container.seekp(rootDir.offset, ios::beg);
 	// Write the root directory metadata to the container
 	rootDir.serialize(container);
-	metadataHashtable.insert("/", rootDir.offset);
+	re.getMetadataHashTable().insert("/", rootDir.offset);
 
-	uint64_t placeholder; // reserved for the hashtables and vectors offsets
+	cout << "Container initialized with root directory.\n";
+
+	uint64_t placeholder = 0; // reserved for the hashtables and vectors offsets
 	for (size_t i = 0; i < 4; ++i) {
 		container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
 	}
 
-	cout << "Container initialized with root directory.\n";
-
 
 }
 
-void ls(const char* command) {
+void ls(ResourceManager& re, const char* command) {
 	// we need to find the offset of the dir that we want to ls 
 	/*string fileName;
 	uint64_t last_offset = findDestName(command, fileName, false);
@@ -687,7 +671,7 @@ void ls(const char* command) {
 	
 }
 
-void printBlockAndContent(const string& filePath, uint64_t offset) {
+void printBlockAndContent(ResourceManager & re,const string& filePath, uint64_t offset) {
 	ifstream file(filePath, ios::binary);
 	if (!file) {
 		std::cerr << "Error: Cannot open file.\n";
@@ -717,7 +701,7 @@ void printBlockAndContent(const string& filePath, uint64_t offset) {
 	
 }
 
-void printMeta(const string& filePath, uint64_t offset) {
+void printMeta(ResourceManager& re,const string& filePath, uint64_t offset) {
 	ifstream file(filePath, ios::binary);
 	if (!file) {
 		std::cerr << "Error: Cannot open file.\n";
@@ -736,8 +720,8 @@ void printMeta(const string& filePath, uint64_t offset) {
 	}
 	else {
 		for (const auto& child_block_key : meta->keys) {
-			uint64_t of = metadataHashtable.get(child_block_key);
-			printBlockAndContent(filePath,of);
+			uint64_t of = re.getMetadataHashTable().get(child_block_key);
+			printBlockAndContent(re,filePath,of);
 
 		}
 	}
@@ -745,7 +729,7 @@ void printMeta(const string& filePath, uint64_t offset) {
 }
 
 // TASK: WHEN A  FILE GET DELETED EVERY BLOCK HAS ITS OWN BLOCK META, SO I NEED TO CONSIDER THIS 
-void cpout(const string& containerPath, string fileName, const string outputPath) {
+void cpout(ResourceManager& re, const string& containerPath, string fileName, const string outputPath) {
 	/*string actualFile;
 	uint64_t parent_offset = findDestName(fileName.c_str(), actualFile);
 	if (parent_offset == -1) {
@@ -761,11 +745,11 @@ void cpout(const string& containerPath, string fileName, const string outputPath
 		return;
 	}
 
-	if (!metadataHashtable.exists(fileName)) {
+	if (!re.getMetadataHashTable().exists(fileName)) {
 		cerr << "Error: File not found in the container.\n";
 		return;
 	}
-	uint64_t metadataOffset = metadataHashtable.get(fileName);
+	uint64_t metadataOffset = re.getMetadataHashTable().get(fileName);
 
 	// seek to the metadata offset and deserialize the meta
 	container.seekg(metadataOffset, ios::beg);
@@ -778,11 +762,11 @@ void cpout(const string& containerPath, string fileName, const string outputPath
 	}
 	char buffer[4096];
 	for (const auto& blockKey : fileMeta->keys) {
-		if (!blockHashTable.exists(blockKey)) {
+		if (!re.getBlockHashTable().exists(blockKey)) {
 			cerr << "Error: block not found for key " << blockKey << ".\n";
 			return;
 		}
-		uint64_t blockOffset = blockHashTable.get(blockKey);
+		uint64_t blockOffset = re.getBlockHashTable().get(blockKey);
 
 		// seek to the block offset and read the block struct to get the content offset
 		container.seekg(blockOffset, ios::beg);
@@ -824,8 +808,8 @@ bool hasExtention(const string& fileName) {
 	return (dotPosition != -1 && dotPosition != 0 && dotPosition != length - 1);
 }
 
-void cpin(string& sourcePath, string& destName, size_t blockSize) {
-	std::ifstream src(sourcePath, std::ios::binary); // opens the file in binary mode , file is read byte by byte
+void cpin(ResourceManager& re ,string& sourcePath, string& destName, size_t blockSize) {
+	std::ifstream src(sourcePath, std::ios::binary | ios::in | ios::out); // opens the file in binary mode , file is read byte by byte
 	if (!src) {
 		std::cerr << "Error: Cannot open source file. \n";
 		return;
@@ -839,24 +823,24 @@ void cpin(string& sourcePath, string& destName, size_t blockSize) {
 	if (directories.size() > 1 && hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			// we need to check also if the dir is some of the first because the last doesnt exist;
-			if (!metadataHashtable.exists(dir) && directories.back() == dir) {
+			if (!re.getMetadataHashTable().exists(dir) && directories.back() == dir) {
 				delete parentMeta;
 				delete childMeta;
 				break;
 			}
-			else if (!metadataHashtable.exists(dir) && directories.back() != dir) {
+			else if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
 				return;
 			}
-			else if (metadataHashtable.exists(dir) && directories.back() == dir) {
+			else if (re.getMetadataHashTable().exists(dir) && directories.back() == dir) {
 				cerr << "Error: file with the same name already exits in the directory, please choose a different one\n";
 				delete parentMeta;
 				delete childMeta;
 				return;
 			}
-			uint64_t offset = metadataHashtable.get(dir);
+			uint64_t offset = re.getMetadataHashTable().get(dir);
 			src.seekg(offset, ios::beg);
 			childMeta = Metadata::deserialize(src);
 			if (parentMeta != nullptr) {
@@ -893,7 +877,7 @@ void cpin(string& sourcePath, string& destName, size_t blockSize) {
 	// checking if the path exist
 	
 
-	std::ofstream container("container.bin", std::ios::binary | std::ios::app);
+	std::ofstream container("container.bin", std::ios::binary | ios::in | ios::out);
 	if (!container) {
 		std::cerr << "Error: Cannot open conatiner.\n";
 		return;
@@ -918,7 +902,7 @@ void cpin(string& sourcePath, string& destName, size_t blockSize) {
 	size_t requiredBlocks = (filesize + blockSize - 1) / blockSize; // ceiling divisiopn
 
 	// Step 1: Try to allocated from free blocks
-	vector<uint64_t> allocatedBlocks = allocatedContiguosBlocks(requiredBlocks, blockSize);
+	vector<uint64_t> allocatedBlocks = allocatedContiguosBlocks(re,requiredBlocks, blockSize);
 
 	// Step 2 : If no free blocks are available, append to the end of the file
 	if (allocatedBlocks.empty()) {
@@ -948,11 +932,11 @@ void cpin(string& sourcePath, string& destName, size_t blockSize) {
 		block.hashBl = block.hashBlock(buffer, bytesRead);
 		block.size = bytesRead;
 		// block doesnt exitsts
-		if (!blockHashTable.exists(block.hashBl)) {
+		if (!re.getBlockHashTable().exists(block.hashBl)) {
 			block.writeToContainer(container, buffer, bytesRead, allocatedBlocks[i]);
 
 			// add the block hjash to tghe hashtable
-			blockHashTable.insert(block.hashBl, block.block_offset);
+			re.getBlockHashTable().insert(block.hashBl, block.block_offset);
 		}
 		
 		fileMeta.size += bytesRead;
@@ -962,9 +946,9 @@ void cpin(string& sourcePath, string& destName, size_t blockSize) {
 	string str(fileMeta.name);
 	//fileMeta.offset = container.tellp();
 	uint64_t metaOff;
-	if (!freeMeta.empty()) {
-		metaOff = freeMeta.back();
-		freeMeta.pop_back();
+	if (!re.getFreeMeta().empty()) {
+		metaOff = re.getFreeMeta().back();
+		re.getFreeMeta().pop_back();
 	}
 	else {
 		metaOff = container.tellp();
@@ -972,9 +956,9 @@ void cpin(string& sourcePath, string& destName, size_t blockSize) {
 	fileMeta.offset = metaOff;
 	container.seekp(metaOff, ios::beg);
 	fileMeta.serialize(container);
-	metadataHashtable.insert(str, fileMeta.offset);
+	re.getMetadataHashTable().insert(str, fileMeta.offset);
 
-	printMeta(sourcePath,fileMeta.offset);
+	printMeta(re,sourcePath,fileMeta.offset);
 
 	// we need to update parent meta children
 	src.seekg(parent_offset, ios::beg);
@@ -991,7 +975,7 @@ void cpin(string& sourcePath, string& destName, size_t blockSize) {
 }
 
 // when making a directory we have two options: 1. it is a single directory to make in the current dir (the same as cpin but whithout the extetion check (because its dir)) 
-void md(string& containerPath, string& directoryName) {
+void md(ResourceManager& re,string& containerPath, string& directoryName) {
 	
 
 	ifstream container(containerPath, ios::binary | ios::in);
@@ -1009,24 +993,24 @@ void md(string& containerPath, string& directoryName) {
 	if (directories.size() > 1 && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			// we need to check also if the dir is some of the first because the last doesnt exist;
-			if (!metadataHashtable.exists(dir) && directories.back() == dir) {
+			if (!re.getMetadataHashTable().exists(dir) && directories.back() == dir) {
 				delete parentMeta;
 				delete childMeta;
 				break;
 			}
-			else if (!metadataHashtable.exists(dir) && directories.back() != dir) {
+			else if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
 				return;
 			}
-			else if(metadataHashtable.exists(dir) && directories.back() == dir){
+			else if(re.getMetadataHashTable().exists(dir) && directories.back() == dir){
 				cerr << "Error: directory with the same name already exits in the directory, please choose a different one\n";
 				delete parentMeta;
 				delete childMeta;
 				return;
 			}
-			uint64_t offset = metadataHashtable.get(dir);
+			uint64_t offset = re.getMetadataHashTable().get(dir);
 			container.seekg(offset, ios::beg);
 			childMeta = Metadata::deserialize(container);
 			if (parentMeta != nullptr) {
@@ -1060,7 +1044,7 @@ void md(string& containerPath, string& directoryName) {
 	else {
 		return;
 	}
-	ofstream containerWrite(containerPath, ios::binary | ios::in);
+	ofstream containerWrite(containerPath, ios::binary |  ios::out);
 	if (!containerWrite) {
 		cerr << "Error: Cannot open container.\n";
 		return;
@@ -1085,7 +1069,7 @@ void md(string& containerPath, string& directoryName) {
 	// Write new directory metadata with the new child
 	containerWrite.seekp(newdirOffset, ios::beg);
 	newDirMeta->serialize(containerWrite);
-	metadataHashtable.insert(string(newDirMeta->name), newdirOffset);
+	re.getMetadataHashTable().insert(string(newDirMeta->name), newdirOffset);
 
 
 	// Update current direcotry metadata wioth the new child
@@ -1094,7 +1078,7 @@ void md(string& containerPath, string& directoryName) {
 	currentMeta->serialize(containerWrite);
 
 	cout << "Directory " << directoryName << " created successfully\n";
-	printMeta(containerPath, newdirOffset);
+	printMeta(re,containerPath, newdirOffset);
 }
 
 // 2 options - cd Home\user\soemwhere or cd Home
@@ -1152,21 +1136,21 @@ void cdRoot(string& containerPath) {
 	currentDirectoryOffset = 0;
 }
 
-void DeleteDir(ifstream& containerRead, ofstream& containerWrite,Metadata* currentMeta) {
+void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite,Metadata* currentMeta) {
 	for (const auto& off : currentMeta->children) {
 		containerRead.seekg(off, ios::beg);
 		Metadata* currentFile = Metadata::deserialize(containerRead);
 		if (currentFile->isDirectory && !currentFile->isDeleted) {
-			DeleteDir(containerRead, containerWrite, currentFile);
+			DeleteDir(re,containerRead, containerWrite, currentFile);
 			currentFile->isDeleted = true;
 			currentFile->children.clear();
-			freeMeta.push_back(currentFile->offset);
+			re.getFreeMeta().push_back(currentFile->offset);
 			containerWrite.seekp(currentFile->offset, ios::beg);
 			currentFile->serialize(containerWrite);
 		}
 		else {
 			string name(currentFile->name);
-			deleteFile(name);
+			deleteFile(re, name);
 		}
 		delete currentFile;
 
@@ -1174,7 +1158,7 @@ void DeleteDir(ifstream& containerRead, ofstream& containerWrite,Metadata* curre
 }
 
 // 2 options rd Folderaa or rd Home\Folderaaa
-void rd(string& containerPath, string& dirName) {
+void rd(ResourceManager& re,string& containerPath, string& dirName) {
 	// delete a folder in current directory, if there are other files or directories in that, thy are also deleted
 	/*string dir;
 	uint64_t parent_offset = findDestName(dirName.c_str(), dir);
@@ -1205,10 +1189,10 @@ void rd(string& containerPath, string& dirName) {
 		containerRead.seekg(offset, ios::beg);
 		Metadata* childMeta = Metadata::deserialize(containerRead);
 		if (string(childMeta->name) == dirName && childMeta->isDirectory && !childMeta->isDeleted) {
-			DeleteDir(containerRead, containerWrite, currentMeta);
+			DeleteDir(re,containerRead, containerWrite, currentMeta);
 			offset_remove = childMeta->offset;
 			childMeta->isDeleted = true;
-			freeMeta.push_back(childMeta->offset);
+			re.getFreeMeta().push_back(childMeta->offset);
 			containerWrite.seekp(childMeta->offset, ios::beg);
 			childMeta->serialize(containerWrite);
 			break;
