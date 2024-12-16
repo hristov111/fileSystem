@@ -1,13 +1,12 @@
 #include <iostream>
 #include <list>
 #include <cstring>
+#include <filesystem>
 #include <vector>
 #include <fstream>
 #include <list>
 #include <string>
 #include <functional> 
-#include <filesystem>
-#include <stdexcept>
 
 
 using namespace std;
@@ -229,6 +228,9 @@ public:
 };
 class ResourceManager {
 private:
+	string containerPath;
+	ifstream inputStream;
+	ofstream outputStream;
 	vector<uint64_t> freeBlocks;
 	vector<uint64_t> freeMeta;
 	HashTable blockHashTable;
@@ -268,43 +270,85 @@ private:
 		}
 		return vec;
 	}
-
-public:
-	ResourceManager(const string& file) : fileName(file) {
-		ifstream in(fileName, ios::binary | ios::in);
-		if (!in) {
-			ofstream out(fileName, ios::binary | ios::out);
-			if (!out) {
-				throw runtime_error("Error: Cannot create file.\n");
+	void InitializeContainer() {
+		
+		ifstream filecheck(containerPath, ios::binary | ios::in);
+		if (filecheck) {
+			filecheck.seekg(0, ios::end);
+			if (filecheck.tellg() > 0) {
+				cout << "Container already exists and has data.\n";
+				return;
 			}
 		}
 
-		in.seekg(sizeof(Metadata), ios::beg);
+		// if the file does not exist or is empty, initialize it 
+		ofstream container(containerPath,ios::binary | ios::out);
+		if (!container) {
+			throw runtime_error("Error: Cannot create container file");
+		}
 
-		in.read(reinterpret_cast<char*>(&vec1Offset), sizeof(&vec1Offset));
-		in.read(reinterpret_cast<char*>(&vec2Offset), sizeof(&vec2Offset));
+		// Create the root directory metadata
+		Metadata rootDir;
+		strncpy_s(rootDir.name, "/", sizeof(rootDir.name));
+		rootDir.isDirectory = true;
+		rootDir.size = 0;
+		rootDir.parent = -1; // Root has no parent
+		rootDir.isDeleted = false;
 
-		in.read(reinterpret_cast<char*>(&hash1Offset), sizeof(&hash1Offset));
+		rootDir.offset = 0;
+		container.seekp(rootDir.offset, ios::beg);
+		// Write the root directory metadata to the container
+		re.getMetadataHashTable().insert("/", rootDir.offset);
+		rootDir.serialize(container);
 
-		in.read(reinterpret_cast<char*>(&hash2Offset), sizeof(&hash2Offset));
+
+		cout << "Container initialized with root directory.\n";
+
+		uint64_t placeholder = 0; // reserved for the hashtables and vectors offsets
+		for (size_t i = 0; i < 4; ++i) {
+			container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
+		}
+
+		container.close();
+
+		inputStream.open(containerPath, ios::binary | ios::in);
+		outputStream.open(containerPath, ios::binary | ios::in | ios::out);
+
+		if (!inputStream || !outputStream) {
+			throw runtime_error("Error : Cannot open contaioner file for reading and writing.\n");
+		}
+	}
+
+public:
+	explicit ResourceManager(const string& file) : fileName(file) {
+		InitializeContainer();
+
+		inputStream.seekg(sizeof(Metadata), ios::beg);
+
+		inputStream.read(reinterpret_cast<char*>(&vec1Offset), sizeof(&vec1Offset));
+		inputStream.read(reinterpret_cast<char*>(&vec2Offset), sizeof(&vec2Offset));
+
+		inputStream.read(reinterpret_cast<char*>(&hash1Offset), sizeof(&hash1Offset));
+
+		inputStream.read(reinterpret_cast<char*>(&hash2Offset), sizeof(&hash2Offset));
 
 		if (vec1Offset != 0) {
-			in.seekg(vec1Offset, ios::beg);
-			freeBlocks = deserializeVector(in);
+			inputStream.seekg(vec1Offset, ios::beg);
+			freeBlocks = deserializeVector(inputStream);
 		}
 		if (vec2Offset != 0) {
-			in.seekg(vec2Offset, ios::beg);
-			freeMeta = deserializeVector(in);
+			inputStream.seekg(vec2Offset, ios::beg);
+			freeMeta = deserializeVector(inputStream);
 		}
 
 		if (hash1Offset != 0) {
-			in.seekg(hash1Offset, ios::beg);
-			blockHashTable.deserialize(in);
+			inputStream.seekg(hash1Offset, ios::beg);
+			blockHashTable.deserialize(inputStream);
 		}
 
 		if (hash2Offset != 0) {
-			in.seekg(hash2Offset, ios::beg);
-			metadataHashtable.deserialize(in);
+			inputStream.seekg(hash2Offset, ios::beg);
+			metadataHashtable.deserialize(inputStream);
 		}
 
 
@@ -312,6 +356,8 @@ public:
 
 	}
 
+	ifstream& getInputStream() { return inputStream; }
+	ofstream& getOutputStream() { return outputStream; }
 
 	vector<uint64_t>& getFreeblocks() {
 		return freeBlocks;
@@ -330,37 +376,38 @@ public:
 	
 
 	~ResourceManager() {
-		// Serialize data when the program ends
-		ofstream out(fileName, ios::binary | ios::in | ios::out);
-		if (!out) {
-			throw runtime_error("Error: Cannot open file for writing\n");
-		}
+		// Serialize data when the program end
 	
-		out.seekp(0, ios::end); // Move to the end of the file
+		outputStream.seekp(0, ios::end); // Move to the end of the file
 		//Write vector 1
-		vec1Offset = out.tellp();
-		serializeVector(freeBlocks, out);
+		vec1Offset = outputStream.tellp();
+		serializeVector(freeBlocks, outputStream);
 
 		// Write vector 2
-		vec2Offset = out.tellp();
-		serializeVector(freeMeta, out);
+		vec2Offset = outputStream.tellp();
+		serializeVector(freeMeta, outputStream);
 
 		// Write HaSh table 1
-		hash1Offset = out.tellp();
-		blockHashTable.serialize(out);
+		hash1Offset = outputStream.tellp();
+		blockHashTable.serialize(outputStream);
 
 		// Write hash table 2
-		hash2Offset = out.tellp();
-		metadataHashtable.serialize(out);
+		hash2Offset = outputStream.tellp();
+		metadataHashtable.serialize(outputStream);
 
-		out.seekp(sizeof(Metadata), ios::beg);
-		out.write(reinterpret_cast<const char*>(&vec1Offset), sizeof(&vec1Offset));
-		out.write(reinterpret_cast<const char*>(&vec2Offset), sizeof(&vec2Offset));
+		outputStream.seekp(sizeof(Metadata), ios::beg);
+		outputStream.write(reinterpret_cast<const char*>(&vec1Offset), sizeof(&vec1Offset));
+		outputStream.write(reinterpret_cast<const char*>(&vec2Offset), sizeof(&vec2Offset));
 
-		out.write(reinterpret_cast<const char*>(&hash1Offset), sizeof(&hash1Offset));
+		outputStream.write(reinterpret_cast<const char*>(&hash1Offset), sizeof(&hash1Offset));
 
-		out.write(reinterpret_cast<const char*>(&hash2Offset), sizeof(&hash2Offset));
-		out.close();
+		outputStream.write(reinterpret_cast<const char*>(&hash2Offset), sizeof(&hash2Offset));
+		outputStream.close();
+		// Ensure the file streams are properly closed
+		if (inputStream.is_open()) inputStream.close();
+		if (outputStream.is_open()) outputStream.close();
+
+		
 	}
 
 };
@@ -490,7 +537,6 @@ int main(int argc, char* argv[]) {
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
 	string fileName = "bbb.txt";
 	ResourceManager resource("container.bin");
-	InitializeContainer(resource,fileSystem);
 	string command = "md";
 	if (command == "md") {
 		md(resource,fileSystem, newDir);
@@ -609,42 +655,7 @@ void deleteFile(ResourceManager& re , string& fileName) {
 	delete fileMeta;
 }
 
-void InitializeContainer(ResourceManager& re,string& containerPath) {
-	ifstream file(containerPath, ios::binary | ios::in );
-	if (file && file.tellg()> 0) {
-		cout << "container already exists and has data.\n";
-		return;
-	}
-	file.close();
 
-	ofstream container(containerPath, ios::binary | ios::out);
-	if (!container) {
-		cerr << "Error: Cannot create container.\n";
-		return;
-	}
-	// Create the root directory metadata
-	Metadata rootDir;
-	strncpy_s(rootDir.name, "/", sizeof(rootDir.name));
-	rootDir.isDirectory = true;
-	rootDir.size = 0;
-	rootDir.parent = -1; // Root has no parent
-	rootDir.isDeleted = false;
-
-	rootDir.offset = 0;
-	container.seekp(rootDir.offset, ios::beg);
-	// Write the root directory metadata to the container
-	rootDir.serialize(container);
-	re.getMetadataHashTable().insert("/", rootDir.offset);
-
-	cout << "Container initialized with root directory.\n";
-
-	uint64_t placeholder = 0; // reserved for the hashtables and vectors offsets
-	for (size_t i = 0; i < 4; ++i) {
-		container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
-	}
-
-
-}
 
 void ls(ResourceManager& re, const char* command) {
 	// we need to find the offset of the dir that we want to ls 
@@ -654,11 +665,7 @@ void ls(ResourceManager& re, const char* command) {
 		return;
 	}*/
 	uint64_t last_offset = 12;
-	std::ifstream container("container.bin", std::ios::binary);
-	if (!container) {
-		std::cerr << "Error: Cannot open container.\n";
-		return;
-	}
+	ifstream& container = re.getInputStream();
 	container.seekg(last_offset, ios::beg);
 	Metadata* parentMeta = Metadata::deserialize(container);
 	for (const auto& off : parentMeta->children) {
