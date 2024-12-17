@@ -426,7 +426,7 @@ uint64_t currentDirectoryOffset = 0;
 struct Block {
 	uint64_t content_offset; // offset of the block content
 	uint64_t block_offset; // offset of the block metadata
-	long int numberOfFiles;
+	long int numberOfFiles = 0;
 	uint64_t size; // size of the block
 	string hashBl;
 	uint32_t checksum; // Resilliency checksum
@@ -562,10 +562,10 @@ int main(int argc, char* argv[]) {
 	string fileSystem = "container.bin";
 	string newDir = "Ehee";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	string fileName = "Ehee\\bbb.txt";
+	string fileName = "Ehee\\ah12\\eee.txt";
 	string pathLS = "";
 	ResourceManager resource(fileSystem);
-	string command = "ls";
+	string command = "rd";
 	if (command == "md") {
 		md(resource, newDir);
 	}
@@ -583,6 +583,9 @@ int main(int argc, char* argv[]) {
 	}
 	else if (command == "cd") {
 		cd(resource,newDir);
+	}
+	else if (command == "rd") {
+		rd(resource, newDir);
 	}
 	//else if (command == "ls") {
 	//	ls();
@@ -641,7 +644,8 @@ void rm(ResourceManager& re , string& fileName) {
 	vector<uint64_t> offsets;
 	uint64_t child_offset;
 	uint64_t parent_offset;
-	if (directories.size() > 1 && hasExtention(directories.back())) {
+
+	if (!directories.empty() && hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			// check if current folder doesnt exist in the meta table
@@ -684,46 +688,34 @@ void rm(ResourceManager& re , string& fileName) {
 			childMeta = nullptr; // reset childmeta
 		}
 		child_offset = offsets.back();
-		offsets.pop_back();
-		parent_offset = offsets.back();
-		offsets.pop_back();
-		fileName = directories.back();
-	}
-	else if (directories.size() == 1 && hasExtention(directories.back())) {
-		child_offset = re.getMetadataHashTable().get(directories.back());
-		parent_offset = currentDirectoryOffset;
 	}
 	else {
 		return;
 	}
+	// get the child first 
+	containerRead.clear();
+	containerRead.seekg(child_offset, ios::beg);
+	Metadata* child = Metadata::deserialize(containerRead);
+	child->isDeleted = true;
+	// get the offset of the parent
+	parent_offset = child->parent;
 
 	// remove the meta from parent children
 	containerRead.clear();
 	containerRead.seekg(parent_offset, ios::beg);
 	Metadata* parent = Metadata::deserialize(containerRead);
 	parent->children.erase(remove(parent->children.begin(), parent->children.end(), child_offset), parent->children.end());
-	
+	parent->size -= child->size;
 
-
-	// find the metadata offset for the file 
-	containerRead.clear();
-	containerRead.seekg(child_offset, ios::beg);
-	// deserialize the meta to get all variables
-	Metadata* fileMeta = Metadata::deserialize(containerRead);
-	// -- the size of the parent with the size of the file
-	// Write back the changed meta for the parent
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
 	parent->serialize(containerWrite);
-	parent->size -= fileMeta->size;
 
-	// mark it as deleted so other files can overwrite it
-	fileMeta->isDeleted = true;
 
 	// but what if the actual block is being used by others, we wont delete it and we wont add it to the freeblocks 
 	// to check if other files are using the block we need to have a variable for each block and the number of files that are using that block
 	// delete all blocks assosiated with the meta file 
-	for (string key: fileMeta->keys) {
+	for (string key: child->keys) {
 		// firstly add all the blocks to a list of reusable blocks
 		uint64_t off = re.getBlockHashTable().get(key);
 		containerRead.clear();
@@ -736,17 +728,17 @@ void rm(ResourceManager& re , string& fileName) {
 		}
 	}
 	// clear the list
-	fileMeta->keys.clear(); 
+	child->keys.clear(); 
 	// Update the metadata in the container to rteflect the deletion
 	// go to the location of the fileMeta so we can overwrite it as deleted
 	containerWrite.clear();
 	containerWrite.seekp(child_offset, ios::beg);
-	fileMeta->serialize(containerWrite);
+	child->serialize(containerWrite);
 	// add it to the free meta file
 	re.getFreeMeta().push_back(child_offset);
-	re.getMetadataHashTable().remove(string(fileMeta->name));
+	re.getMetadataHashTable().remove(string(child->name));
 	delete parent;
-	delete fileMeta;
+	delete child;
 }
 
 
@@ -1462,39 +1454,30 @@ void rd(ResourceManager& re, string& dirName) {
 		return;
 	}
 
+	// Reading the child meta
 	containerRead.clear();
 	containerRead.seekg(parent_offset, ios::beg);
 	Metadata* currentMeta = Metadata::deserialize(containerRead);
-	uint64_t offset_remove;
-	size_t size_remove;
-	for (const auto& offset : currentMeta->children) {
-		// deserialize the child
-		containerRead.clear();
-		containerRead.seekg(offset, ios::beg);
-		Metadata* childMeta = Metadata::deserialize(containerRead);
-		// checking if the childMeta is the directory that we are looking for
-		if (string(childMeta->name) == dirName && childMeta->isDirectory && !childMeta->isDeleted) {
-			// we are calling a recursive function that takes the childMeta
-			DeleteDir(re,containerRead, containerWrite, childMeta);
-			// mark the offset of the childMeta so we can remove it afterwards
-			offset_remove = childMeta->offset;
-			// mark the size to remove from the parent
-			size_remove = childMeta->size;
-			// mark the meta as deleted
-			childMeta->isDeleted = true;
-			// flag the meta for free use
-			re.getFreeMeta().push_back(childMeta->offset);
-			// and serialize the meta
-			containerWrite.seekp(childMeta->offset, ios::beg);
-			childMeta->serialize(containerWrite);
-			break;
-		}
-		delete childMeta;
-	}
-	currentMeta->children.erase(remove(currentMeta->children.begin(), currentMeta->children.end(), offset_remove), currentMeta->children.end());
-	currentMeta->size -= size_remove;
+	// Reading the parent meta
+	containerRead.clear();
+	containerRead.seekg(currentMeta->parent, ios::beg);
+	parentMeta = Metadata::deserialize(containerRead);
+	// deleting the currentMeta children 
+	DeleteDir(re, containerRead, containerWrite, currentMeta);
+	// updating the actual file for reuse
+	currentMeta->isDeleted = true;
+	currentMeta->children.clear();
+	re.getFreeMeta().push_back(currentMeta->offset);
 	containerWrite.clear();
-	containerWrite.seekp(currentDirectoryOffset, ios::beg);
+	containerWrite.seekp(currentMeta->offset, ios::beg);
+	currentMeta->serialize(containerWrite);
+
+	// Removing the offset from children in parent and decreasing the size also
+	parentMeta->children.erase(remove(currentMeta->children.begin(), currentMeta->children.end(), currentMeta->offset), currentMeta->children.end());
+	parentMeta->size -= currentMeta->size;
+	// serializing the child
+	containerWrite.clear();
+	containerWrite.seekp(parentMeta->offset, ios::beg);
 	currentMeta->serialize(containerWrite);
 
 	delete currentMeta;
