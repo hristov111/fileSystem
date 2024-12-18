@@ -468,6 +468,7 @@ struct Block {
 	void writeToContainer(std::ofstream& container, const char* buffer, size_t buffersize,uint64_t offset) {
 		block_offset = offset;
 		size = buffersize;
+		numberOfFiles = 1;
 		container.clear();
 		container.seekp(offset);
 
@@ -554,6 +555,8 @@ void cdRoot(ResourceManager& re);
 void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite, Metadata* currentMeta);
 void rd(ResourceManager& re, string& dirName);
 
+
+// IMP: WHEN we create a file i need to update the size of every parent directory up to the root size
 int main(int argc, char* argv[]) {
 	/*if (argc < 2) {
 		std::cerr << "Ussage: <command> [arguments]\n";
@@ -562,10 +565,10 @@ int main(int argc, char* argv[]) {
 	string fileSystem = "container.bin";
 	string newDir = "Ehee";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	string fileName = "Ehee\\ah12\\eee.txt";
-	string pathLS = "";
+	string fileName = "Ehee\\Ahaa1\\mehe.txt";
+	string pathLS = "md";
 	ResourceManager resource(fileSystem);
-	string command = "rd";
+	string command = "md";
 	if (command == "md") {
 		md(resource, newDir);
 	}
@@ -722,9 +725,20 @@ void rm(ResourceManager& re , string& fileName) {
 		containerRead.seekg(off, ios::beg);
 		Block* block = Block::deserialize(containerRead);
 		if (block->numberOfFiles < 2) {
+			block->size = 0;
+			block->numberOfFiles = 0;
+			containerWrite.clear();
+			containerWrite.seekp(off, ios::beg);
+			block->serialize(containerWrite);
 			re.getFreeblocks().push_back(off); // getting the offset of the actual block, that will lead to the content of the block
 			// remove the block from hashtable
 			re.getBlockHashTable().remove(key); // remove the key from the block hash table 
+		}
+		else {
+			block->numberOfFiles--;
+			containerWrite.clear();
+			containerWrite.seekp(off, ios::beg);
+			block->serialize(containerWrite);
 		}
 	}
 	// clear the list
@@ -1014,16 +1028,8 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 			}
 			if (directories.back() == dir) {
 				// check if there is a file with the same name in the last dir
-				for (const auto& child_offset: parentMeta->children) {
-					containerRead.clear();
-					containerRead.seekg(child_offset);
-					Metadata* child = Metadata::deserialize(containerRead);
-					if (string(child->name) == dir) {
-						cerr << "There is a file with the same name in the directory please choose a different name!\n";
-						delete parentMeta;
-						delete childMeta;
-						return;
-					}
+				if (!checkNames(containerRead, parentMeta->offset, dir)) {
+					return;
 				}
 				break;
 			}
@@ -1055,7 +1061,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		parent_offset = offsets.back();
 		fileName = directories.back();
 	}
-	else if(directories.size() == 1 && hasExtention(directories.back())) {
+	else if(directories.size() == 1 && hasExtention(directories.back()) && checkNames(containerRead,currentDirectoryOffset, fileName)) {
 		parent_offset = currentDirectoryOffset;
 	}
 	else {
@@ -1163,18 +1169,58 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	// we need to update parent meta children
 	containerRead.clear();
 	containerRead.seekg(parent_offset, ios::beg);
+	// this is the parent of the actual file that we are adding
 	Metadata* parent = Metadata::deserialize(containerRead);
-	parent->size += fileMeta.size;
 	parent->children.push_back(fileMeta.offset);
-	containerWrite.clear();
-	containerWrite.seekp(parent_offset,ios::beg);
-	parent->serialize(containerWrite);
-	delete parent;
+	// Right here we need to loop over every parent till we reach the root and update their sizes 
+	uint64_t offset = parent_offset;
+	while (true) { // -1 because the parent of the root is -1 by default
+		// update the size of the current meta
+		parent->size += fileMeta.size;
+		containerWrite.clear();
+		containerWrite.seekp(offset, ios::beg);
+		parent->serialize(containerWrite);
+		// take the parent of the current meta
+		offset = parent->parent;
+		// delete current meta
+
+		delete parent;
+		// check if the next offset is the root parent which doesnt exist and thats why we break
+		if (offset == -1) break;
+		//deserialize the parent of the current meta
+		containerRead.clear();
+		containerRead.seekg(offset, ios::beg);
+		parent = Metadata::deserialize(containerRead);
+	}
+
 
 
 
 	// Write metadata to the container 
 	cout << "File copied to container.\n";
+}
+
+// this function checks in the parent folder if there are other files or directories with the same name as the one that we want to create 
+bool checkNames(ifstream& container,uint64_t parent_offset, string dirName) {
+	// First deserialize the parent
+	container.clear();
+	container.seekg(parent_offset, ios::beg);
+	Metadata* parent = Metadata::deserialize(container); 
+
+	for (const auto& child_offset : parent->children) {
+		container.clear();
+		container.seekg(child_offset);
+		Metadata* child = Metadata::deserialize(container);
+		if (string(child->name) == dirName) {
+			cerr << "There is a file with the same name in the directory please choose a different name!\n";
+			delete parent;
+			delete child;
+			return false;
+		}
+		delete child;
+	}
+	delete parent; 
+	return true;
 }
 
 // when making a directory we have two options: 1. it is a single directory to make in the current dir (the same as cpin but whithout the extetion check (because its dir)) 
@@ -1201,16 +1247,8 @@ void md(ResourceManager& re, string& directoryName) {
 			}
 			if (directories.back() == dir) {
 				// check if there is a file with the same name in the last dir
-				for (const auto& child_offset : parentMeta->children) {
-					container.clear();
-					container.seekg(child_offset);
-					Metadata* child = Metadata::deserialize(container);
-					if (string(child->name) == dir) {
-						cerr << "There is a file with the same name in the directory please choose a different name!\n";
-						delete parentMeta;
-						delete childMeta;
-						return;
-					}
+				if (!checkNames(container, parentMeta->offset, dir)) {
+					return;
 				}
 				break;
 			}
@@ -1242,7 +1280,7 @@ void md(ResourceManager& re, string& directoryName) {
 		parent_offset = offsets.back();
 		directoryName = directories.back();
 	}
-	else if (directories.size() == 1 && !hasExtention(directories.back())) {
+	else if (directories.size() == 1 && !hasExtention(directories.back()) && checkNames(container,currentDirectoryOffset, directoryName)) {
 		parent_offset = currentDirectoryOffset;
 	}
 	else {
@@ -1372,7 +1410,7 @@ void cdDots(ResourceManager& re) {
 
 }
 
-
+// Imp - we need build a function where i can build up to the root to update size of the nodes 
 void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite,Metadata* currentMeta) {
 	for (const auto& off : currentMeta->children) {
 		containerRead.clear();
