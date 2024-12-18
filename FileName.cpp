@@ -11,7 +11,9 @@
 
 using namespace std;
 struct Metadata {
+	// if we have metas with the same names we can use numbering method (we can use incremental numbering)
 	char name[100]; // file or directory name
+	size_t id;
 	bool isDirectory; // True if it's a directory
 	uint64_t offset; // offset in the container
 	uint64_t size; // size of the file (0 for directories)
@@ -23,6 +25,7 @@ struct Metadata {
 	void serialize(std::ofstream& out) {
 		out.clear();
 		out.write(name, sizeof(name));
+		out.write(reinterpret_cast<const char*>(&id), sizeof(id));
 		out.write(reinterpret_cast<const char*>(&isDirectory), sizeof(isDirectory));
 		out.write(reinterpret_cast<const char*>(&offset), sizeof(offset));
 		out.write(reinterpret_cast<const char*>(&size), sizeof(size));
@@ -51,12 +54,12 @@ struct Metadata {
 
 
 	}
-
 	static Metadata* deserialize(std::ifstream& in) {
 		Metadata* metadata = new Metadata();
 		in.clear();
 		// Read fixed size fields
 		in.read(metadata->name, sizeof(metadata->name));
+		in.read(reinterpret_cast<char *>(metadata->id), sizeof(metadata->id));
 		in.read(reinterpret_cast<char*>(&metadata->isDirectory), sizeof(metadata->isDirectory));
 		in.read(reinterpret_cast<char*>(&metadata->offset), sizeof(metadata->offset));
 		in.read(reinterpret_cast<char*>(&metadata->size), sizeof(metadata->size));
@@ -115,15 +118,6 @@ public:
 	// Insert a key value pair
 	void insert(const string& key, const uint64_t& value) {
 		int index = hashFunction(key);
-
-		for (auto& kv : table[index]) {
-			if (kv.first == key) {
-				kv.second = value;
-				return;
-			}
-			// key already exists
-		}
-
 		table[index].emplace_back(key, value);
 	}
 
@@ -236,6 +230,8 @@ private:
 	HashTable blockHashTable;
 	HashTable metadataHashtable;
 	string fileName;
+	// this is for the fileMeta idenitfier if it has 
+	size_t id = 0;
 	uint64_t vec1Offset = 0;
 	uint64_t vec2Offset = 0;
 	uint64_t hash1Offset = 0;
@@ -334,6 +330,8 @@ public:
 		inputStream.clear();
 		inputStream.seekg(sizeof(Metadata), ios::beg);
 
+		inputStream.read(reinterpret_cast<char*>(&id), sizeof(id));
+
 		inputStream.read(reinterpret_cast<char*>(&vec1Offset), sizeof(vec1Offset));
 		inputStream.read(reinterpret_cast<char*>(&vec2Offset), sizeof(vec2Offset));
 
@@ -367,6 +365,9 @@ public:
 
 	ifstream& getInputStream() { return inputStream; }
 	ofstream& getOutputStream() { return outputStream; }
+
+	size_t& getNextId() { return id; }
+	void incrementId() { id++; }
 
 	vector<uint64_t>& getFreeblocks() {
 		return freeBlocks;
@@ -405,13 +406,14 @@ public:
 		metadataHashtable.serialize(outputStream);
 
 		outputStream.seekp(sizeof(Metadata), ios::beg);
+		outputStream.write(reinterpret_cast<const char*>(&id), sizeof(id));
+
 		outputStream.write(reinterpret_cast<const char*>(&vec1Offset), sizeof(vec1Offset));
 		outputStream.write(reinterpret_cast<const char*>(&vec2Offset), sizeof(vec2Offset));
 
 		outputStream.write(reinterpret_cast<const char*>(&hash1Offset), sizeof(hash1Offset));
 
 		outputStream.write(reinterpret_cast<const char*>(&hash2Offset), sizeof(hash2Offset));
-		outputStream.close();
 		// Ensure the file streams are properly closed
 		if (inputStream.is_open()) inputStream.close();
 		if (outputStream.is_open()) outputStream.close();
@@ -422,6 +424,8 @@ public:
 };
 
 uint64_t currentDirectoryOffset = 0;
+// this needs to be serialized and deserialzied
+
 
 struct Block {
 	uint64_t content_offset; // offset of the block content
@@ -540,7 +544,7 @@ vector<string> split(const char* str, char delimeter) {
 
 void InsertionSort(vector<uint64_t>& array);
 std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
-void rm(ResourceManager& re, string& fileName);
+void rm(ResourceManager& re, string& fileName, uint64_t parentoffset=-1);
 void InitializeContainer(ResourceManager& re, string& containerPath);
 void ls(ResourceManager& re, string path = "");
 void printBlockAndContent(ResourceManager& re, uint64_t offset);
@@ -554,6 +558,7 @@ void cdDots(ResourceManager& re);
 void cdRoot(ResourceManager& re);
 void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite, Metadata* currentMeta);
 void rd(ResourceManager& re, string& dirName);
+bool checkNames(ifstream& container, uint64_t parent_offset, string dirName);
 
 
 // IMP: WHEN we create a file i need to update the size of every parent directory up to the root size
@@ -565,10 +570,10 @@ int main(int argc, char* argv[]) {
 	string fileSystem = "container.bin";
 	string newDir = "Ehee";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	string fileName = "Ehee\\Ahaa1\\mehe.txt";
-	string pathLS = "md";
+	string fileName = "Ehee\\mehe.txt";
+	string pathLS = "cpin";
 	ResourceManager resource(fileSystem);
-	string command = "md";
+	string command = "cpin";
 	if (command == "md") {
 		md(resource, newDir);
 	}
@@ -636,7 +641,29 @@ std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requi
 
 }
 
-void rm(ResourceManager& re , string& fileName) {
+uint64_t getOffsetByParent(ifstream& container,uint64_t parent_offset, string fileName) {
+	container.clear();
+	container.seekg(parent_offset, ios::beg);
+	Metadata* parent = Metadata::deserialize(container);
+	for (const auto& child_off : parent->children) {
+		container.clear();
+		container.seekg(child_off, ios::beg);
+		Metadata* child = Metadata::deserialize(container);
+		if (string(child->name) == fileName) {
+			delete parent;	
+			uint64_t off = child->offset;
+			delete child;
+			return off;
+
+		}
+		delete child;
+	}
+	delete parent;
+	return -1;
+}
+
+
+void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
 	ifstream& containerRead = re.getInputStream();
 	ofstream& containerWrite = re.getOutputStream();
 
@@ -645,21 +672,40 @@ void rm(ResourceManager& re , string& fileName) {
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(fileName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t child_offset;
+	uint64_t child_offset = currentDirectoryOffset;
 	uint64_t parent_offset;
 
 	if (!directories.empty() && hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
+			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			// check if current folder doesnt exist in the meta table
+
 			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
 				return;
 			}
-			
-			uint64_t offset = re.getMetadataHashTable().get(dir);
+			// problem is that when there are two files with the 
+			// same names but in different folders we need to find the right file, so we need the offset of the right file
+			if (actualOffset != -1) {
+				offset = actualOffset;
+			}
+			else if (directories.size() == 1) {
+				offset = getOffsetByParent(containerRead, child_offset, dir);
+			}
+			else {
+				offset = getOffsetByParent(containerRead, child_offset, dir);
+			}
+			// check if the actual offfset exist in the parent children
+			if (offset == -2) {
+				cerr << "The file doesnt exist in that folder!\n";
+				return;
+			}
+			// 2 options, one is the actual file is in root dir, so we deserialize the root and get the child that matches the name(two files with the same name cant be in a folder)
+			// second option is the file is not in the root and is in a different folder, in that case we also deserialize the parent to get offset
+
 			if (directories.back() == dir) {
 				delete parentMeta;
 				delete childMeta;
@@ -685,6 +731,7 @@ void rm(ResourceManager& re , string& fileName) {
 
 				}
 			}
+			child_offset = childMeta->offset;
 			offsets.push_back(offset);
 			delete parentMeta; // free prvious parent
 			parentMeta = childMeta; // current child becomes the new parent
@@ -763,9 +810,10 @@ void ls(ResourceManager& re, string path) {
 	Metadata* childMeta = nullptr;
 	vector<string> directories = split(path.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset;
+	uint64_t parent_offset = currentDirectoryOffset;
 	if (!directories.empty() && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
+			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			// check if current folder doesnt exist in the meta table
 			// checking if dir doesnt exist in the hashtable 
@@ -777,7 +825,16 @@ void ls(ResourceManager& re, string path) {
 				return;
 			}
 			// checking if the path actually exists by going over the children of every current parent
-			uint64_t offset = re.getMetadataHashTable().get(dir);
+			if (directories.size() == 1) {
+				offset = getOffsetByParent(containerRead, parent_offset, dir);
+			}
+			else {
+				offset = getOffsetByParent(containerRead, parent_offset, dir);
+			}
+			if (offset == -1) {
+				cerr << "Error: Path is invalid!\n";
+				return;
+			}
 			if (directories.back() == dir) {
 				delete parentMeta;
 				delete childMeta;
@@ -803,6 +860,7 @@ void ls(ResourceManager& re, string path) {
 
 				}
 			}
+			parent_offset = childMeta->offset;
 			offsets.push_back(offset);
 			delete parentMeta; // free prvious parent
 			parentMeta = childMeta; // current child becomes the new parent
@@ -811,10 +869,8 @@ void ls(ResourceManager& re, string path) {
 		parent_offset = offsets.back();
 		path = directories.back();
 	}
-	else if (directories.empty()) {
-		parent_offset = currentDirectoryOffset;
-	}
-	else {
+	else if (directories.empty()) {}
+	else{
 		return;
 	}
 
@@ -823,7 +879,11 @@ void ls(ResourceManager& re, string path) {
 	for (const auto& off : parent->children) {
 		containerRead.seekg(off, ios::beg);
 		Metadata* currentChild = Metadata::deserialize(containerRead);
-		cout << currentChild->name << " " << currentChild->size << endl;
+		// check the parent
+		containerRead.clear();
+		containerRead.seekg(currentChild->parent);
+		Metadata* parent = Metadata::deserialize(containerRead);
+		cout << currentChild->name << " " << currentChild->size << ": parent is " << parent->name << endl;
 		delete currentChild;
 	}
 	delete parentMeta;
@@ -888,9 +948,10 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(fileName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset;
+	uint64_t parent_offset = currentDirectoryOffset;
 	if (directories.size() > 1 && hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
+			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			// check if current folder doesnt exist in the meta table
 			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
@@ -899,7 +960,13 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 				delete childMeta;
 				return;
 			}
-			uint64_t offset = re.getMetadataHashTable().get(dir);
+
+			offset = getOffsetByParent(containerRead, parent_offset, dir);
+			if (offset == -1) {
+				cerr << "Error: Path of file invalid!\n";
+				return;
+			}
+			
 			if (directories.back() == dir) {
 				// check if there is a file with the same name in the last dir
 				delete parentMeta;
@@ -926,6 +993,7 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 
 				}
 			}
+			parent_offset = childMeta->offset;
 			offsets.push_back(offset);
 			delete parentMeta; // free prvious parent
 			parentMeta = childMeta; // current child becomes the new parent
@@ -935,7 +1003,11 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 		fileName = directories.back();
 	}
 	else if (directories.size() == 1 && hasExtention(directories.back())) {
-		parent_offset = currentDirectoryOffset;
+		parent_offset = getOffsetByParent(containerRead, currentDirectoryOffset, fileName);
+		if (parent_offset == -1) {
+			cerr << "The file doesnt exist in that folder!\n";
+			return;
+		}
 	}
 	else {
 		return;
@@ -1015,9 +1087,10 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(fileName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset;
+	uint64_t parent_offset = currentDirectoryOffset;
 	if (directories.size() > 1 && hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
+			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			// check if current folder doesnt exist in the meta table
 			 if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
@@ -1026,14 +1099,22 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 				delete childMeta;
 				return;
 			}
+			 
+
+			 
 			if (directories.back() == dir) {
 				// check if there is a file with the same name in the last dir
-				if (!checkNames(containerRead, parentMeta->offset, dir)) {
+				if (!checkNames(containerRead, parent_offset, dir)) {
 					return;
 				}
 				break;
 			}
-			uint64_t offset = re.getMetadataHashTable().get(dir);
+			// always wherever i am we start from the currentoffset as parent offset
+			offset = getOffsetByParent(containerRead, parent_offset, dir);
+			if (offset == -1) {
+				cerr << "The file doesnt exist in that folder!\n";
+				return;
+			}
 			containerRead.clear();
 			containerRead.seekg(offset, ios::beg);
 			childMeta = Metadata::deserialize(containerRead);
@@ -1053,6 +1134,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 
 				}
 			}
+			parent_offset = childMeta->offset;
 			offsets.push_back(offset);
 			delete parentMeta; // free prvious parent
 			parentMeta = childMeta; // current child becomes the new parent
@@ -1062,7 +1144,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		fileName = directories.back();
 	}
 	else if(directories.size() == 1 && hasExtention(directories.back()) && checkNames(containerRead,currentDirectoryOffset, fileName)) {
-		parent_offset = currentDirectoryOffset;
+		parent_offset = currentDirectoryOffset; 
 	}
 	else {
 		return;
@@ -1079,6 +1161,9 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	fileMeta.isDeleted = false;
 	fileMeta.size = 0;
 	fileMeta.parent = parent_offset;
+	fileMeta.id += re.getNextId();
+	re.incrementId();
+
 
 
 	// Get the file size 
@@ -1234,7 +1319,7 @@ void md(ResourceManager& re, string& directoryName) {
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(directoryName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset;
+	uint64_t parent_offset = currentDirectoryOffset;
 	container.clear();
 	if (directories.size() > 1 && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
@@ -1247,13 +1332,13 @@ void md(ResourceManager& re, string& directoryName) {
 			}
 			if (directories.back() == dir) {
 				// check if there is a file with the same name in the last dir
-				if (!checkNames(container, parentMeta->offset, dir)) {
+				if (!checkNames(container, parent_offset, dir)) {
 					return;
 				}
 				break;
 			}
-			
-			uint64_t offset = re.getMetadataHashTable().get(dir);
+			uint64_t offset = getOffsetByParent(container,parent_offset, dir);
+
 			container.seekg(offset, ios::beg);
 			childMeta = Metadata::deserialize(container);
 			if (parentMeta != nullptr) {
@@ -1272,6 +1357,7 @@ void md(ResourceManager& re, string& directoryName) {
 
 				}
 			}
+			parent_offset = childMeta->offset;
 			offsets.push_back(offset);
 			delete parentMeta; // free prvious parent
 			parentMeta = childMeta; // current child becomes the new parent
@@ -1333,14 +1419,19 @@ void cd(ResourceManager& re, string& directoryName) {
 	if (!directories.empty() && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			// we need to check also if the dir is some of the first because the last doesnt exist;
+			uint64_t offset;
 			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
 				return;
 			}
-			uint64_t offset = re.getMetadataHashTable().get(dir);
-
+			if (directories.size() == 1) {
+				offset = getOffsetByParent(container, currentDirectoryOffset, dir);
+			}
+			else {
+				offset = getOffsetByParent(container, parentMeta->offset, dir);
+			}
 			if (directories.back() == dir) {
 				delete parentMeta;
 				delete childMeta;
@@ -1427,7 +1518,7 @@ void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& container
 		}
 		else {
 			string name(currentFile->name);
-			rm(re, name);
+			rm(re, name, currentFile->offset);
 		}
 		delete currentFile;
 
@@ -1443,9 +1534,11 @@ void rd(ResourceManager& re, string& dirName) {
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(dirName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset;
+	uint64_t parent_offset = currentDirectoryOffset;
+	// after all of this i need to get the acutal last dir
 	if (!directories.empty() && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
+			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
@@ -1453,8 +1546,12 @@ void rd(ResourceManager& re, string& dirName) {
 				delete childMeta;
 				return;
 			}
-			uint64_t offset = re.getMetadataHashTable().get(dir);
-
+			if (directories.size() == 1) {
+				offset = getOffsetByParent(containerRead, parent_offset, dir);
+			}
+			else {
+				offset = getOffsetByParent(containerRead, parent_offset, dir);
+			}
 			if (directories.back() == dir) {
 				offsets.push_back(offset);
 				delete parentMeta;
@@ -1479,6 +1576,7 @@ void rd(ResourceManager& re, string& dirName) {
 
 				}
 			}
+			parent_offset = childMeta->offset;
 			offsets.push_back(offset);
 			delete parentMeta; // free prvious parent
 			parentMeta = childMeta; // current child becomes the new parent
@@ -1511,7 +1609,7 @@ void rd(ResourceManager& re, string& dirName) {
 	currentMeta->serialize(containerWrite);
 
 	// Removing the offset from children in parent and decreasing the size also
-	parentMeta->children.erase(remove(currentMeta->children.begin(), currentMeta->children.end(), currentMeta->offset), currentMeta->children.end());
+	parentMeta->children.erase(remove(parentMeta->children.begin(), parentMeta->children.end(), currentMeta->offset), parentMeta->children.end());
 	parentMeta->size -= currentMeta->size;
 	// serializing the child
 	containerWrite.clear();
