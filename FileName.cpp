@@ -54,6 +54,17 @@ struct Metadata {
 	bool isDeleted;
 
 	void serialize(std::ofstream& out) {
+		cout << "FileMeta name: " << name << endl
+			<< "FileMeta size: " << size << endl
+
+			<< "FileMeta id: " << id << endl
+
+			<< "FileMeta isdeleted: " << isDeleted << endl
+
+			<< "FileMeta isDirectory: " << isDirectory << endl
+
+			<< "FileMeta parent: " << parent << endl
+			<< "FileMeta offset: " << offset << endl;
 		out.clear();
 		out.write(name, sizeof(name));
 		out.write(reinterpret_cast<const char*>(&id), sizeof(id));
@@ -123,6 +134,19 @@ struct Metadata {
 				in.read(reinterpret_cast<char*>(&metadata->children[i]), sizeof(metadata->children[i]));
 			}
 		}
+		cout << "FileMeta name: " << metadata->name << endl
+			<< "FileMeta size: " << metadata->size << endl
+
+			<< "FileMeta id: " << metadata->id << endl
+
+			<< "FileMeta isdeleted: " << metadata->isDeleted << endl
+
+			<< "FileMeta isDirectory: " << metadata->isDirectory << endl
+
+			<< "FileMeta parent: " << metadata->parent << endl
+			<< "FileMeta offset: " << metadata->offset << endl;
+
+
 
 		return metadata;
 
@@ -557,7 +581,7 @@ struct Block {
 			throw runtime_error("Error: Failed to seek to block offset");
 		}
 		serialize(container);
-		
+		container.flush();
 		// Write the block's data to the container
 		container.clear();
 		container.seekp(content_offset, ios::beg);
@@ -580,6 +604,14 @@ struct Block {
 			hash += to_string((block[i] + i) % 256);
 		}
 		return hash;
+	}
+
+	size_t getSerializedSize() const {
+		size_t fiexedSize = sizeof(content_offset) + sizeof(block_offset) + sizeof(numberOfFiles)
+			+ sizeof(size) + sizeof(checksum);
+
+		size_t dynamicsize = sizeof(size_t) + hashBl.size();
+		return fiexedSize + dynamicsize;
 	}
 
 };
@@ -631,6 +663,7 @@ void cdRoot(ResourceManager& re);
 void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite, Metadata* currentMeta);
 void rd(ResourceManager& re, string& dirName);
 bool checkNames(ifstream& container, uint64_t parent_offset, string dirName);
+uint64_t getMetadataOff(ResourceManager& re, ifstream& containerRead, Metadata& fileMeta);
 
 
 // IMP: WHEN we create a file i need to update the size of every parent directory up to the root size
@@ -642,7 +675,7 @@ int main(int argc, char* argv[]) {
 	string fileSystem = "container.bin";
 	string newDir = "Ehaa";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	string fileName = "hehe.txt";
+	string fileName = "meg2.txt";
 
 	ResourceManager resource(fileSystem);
 	string command = "cpin";
@@ -874,9 +907,7 @@ void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
 	delete child;
 }
 
-uint64_t getMetadataOff(ResourceManager& re, Metadata& fileMeta) {
-	ifstream& containerRead = re.getInputStream();
-	ofstream& containerWrite = re.getOutputStream();
+uint64_t getMetadataOff(ResourceManager& re, ifstream& containerRead, Metadata& fileMeta) {
 	uint64_t metaOff;
 	if (!re.getFreeMeta().empty()) {
 		metaOff = re.getFreeMeta().back();
@@ -1268,14 +1299,17 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	fileMeta.id = re.getNextId();
 
 	// first file metaoffset is 190 
-	uint64_t metaOff = getMetadataOff(re, fileMeta);
+	uint64_t metaOff = getMetadataOff(re,containerRead, fileMeta);
 	
 	// SERIALIZE THE FILEMETA
 	fileMeta.offset = metaOff;
 	re.getMetadataHashTable().insert(fileMeta.makeKey(), fileMeta.offset);
 
-	// ADD THE FILEMETA OFFSET TO THE PARENT
+	// ADD THE FILEMETA OFFSET TO THE PARENT and serialize
 	parent->children.push_back(fileMeta.offset);
+	containerWrite.clear();
+	containerWrite.seekp(parent_offset, ios::beg);
+	parent->serialize(containerWrite);
 
 	// serialize because of the offset we need it to be reserved
 	containerWrite.clear();
@@ -1346,6 +1380,8 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 			containerWrite.clear();
 			containerWrite.seekp(off, ios::beg);
 			bl->serialize(containerWrite);
+			containerWrite.flush();
+
 			delete bl;
 			
 		}
@@ -1353,11 +1389,14 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		fileMeta.size += bytesRead;
 		fileMeta.keys.push_back(block.hashBl);
 		remainingSize -= bytesRead;
+		cout << "Before:" << endl;
 	}
 
 	containerWrite.clear();
 	containerWrite.seekp(metaOff, ios::beg);
 	fileMeta.serialize(containerWrite);
+	containerWrite.flush();
+
 	
 	// Right here we need to loop over every parent till we reach the root and update their sizes 
 	uint64_t offset = parent_offset;
@@ -1367,6 +1406,8 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		containerWrite.clear();
 		containerWrite.seekp(offset, ios::beg);
 		parent->serialize(containerWrite);
+		containerWrite.flush();
+
 		// take the parent of the current meta
 		offset = parent->parent;
 		// delete current meta
@@ -1381,8 +1422,6 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		parent = Metadata::deserialize(containerRead);
 	}
 	containerWrite.clear();
-	containerWrite.flush();
-
 
 	// Write metadata to the container 
 	cout << "File copied to container.\n";
@@ -1492,7 +1531,7 @@ void md(ResourceManager& re, string& directoryName) {
 	newDirMeta->id = re.getNextId();
 
 	// Determine the offset for the new directory metadata
-	uint64_t newdirOffset = getMetadataOff(re, *newDirMeta);
+	uint64_t newdirOffset = getMetadataOff(re, container, *newDirMeta);
 	newDirMeta->offset = newdirOffset;
 
 	// Write new directory metadata with the new child
