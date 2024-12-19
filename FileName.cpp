@@ -90,7 +90,7 @@ struct Metadata {
 		in.clear();
 		// Read fixed size fields
 		in.read(metadata->name, sizeof(metadata->name));
-		in.read(reinterpret_cast<char *>(metadata->id), sizeof(metadata->id));
+		in.read(reinterpret_cast<char*>(&metadata->id), sizeof(metadata->id));
 		in.read(reinterpret_cast<char*>(&metadata->isDirectory), sizeof(metadata->isDirectory));
 		in.read(reinterpret_cast<char*>(&metadata->offset), sizeof(metadata->offset));
 		in.read(reinterpret_cast<char*>(&metadata->size), sizeof(metadata->size));
@@ -351,6 +351,8 @@ private:
 		rootDir.size = 0;
 		rootDir.parent = -1; // Root has no parent
 		rootDir.isDeleted = false;
+		rootDir.id = id;
+		incrementId();
 
 		rootDir.offset = 0;
 		container.seekp(rootDir.offset, ios::beg);
@@ -362,7 +364,7 @@ private:
 		cout << "Container initialized with root directory.\n";
 
 		size_t placeholder = 0; // reserved for the hashtables and vectors offsets
-		for (size_t i = 0; i < 4; ++i) {
+		for (size_t i = 0; i < 5; ++i) {
 			container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
 		}
 
@@ -491,6 +493,13 @@ struct Block {
 	uint32_t checksum; // Resilliency checksum
 	
 	void serialize(std::ofstream& out) const {
+		std::cout << "Serializing Block - content_offset: " << content_offset
+			<< ", block_offset: " << block_offset
+			<< ", numberOfFiles: " << numberOfFiles
+			<< ", size: " << size
+			<< ", checksum: " << checksum
+			<< ", hashBl: " << hashBl << std::endl;
+		out.clear();
 		out.write(reinterpret_cast<const char*>(&content_offset), sizeof(content_offset));
 		out.write(reinterpret_cast<const char*>(&block_offset), sizeof(block_offset));
 		out.write(reinterpret_cast<const char*>(&numberOfFiles), sizeof(numberOfFiles));
@@ -506,7 +515,7 @@ struct Block {
 	}
 	static Block* deserialize(std::ifstream& in) {
 		Block* block = new Block();
-
+		in.clear();
 		in.read(reinterpret_cast<char*>(&block->content_offset), sizeof(block->content_offset));
 		in.read(reinterpret_cast<char*>(&block->block_offset), sizeof(block->block_offset));
 		in.read(reinterpret_cast<char*>(&block->numberOfFiles), sizeof(block->numberOfFiles));
@@ -520,7 +529,12 @@ struct Block {
 
 		block->hashBl.resize(hashLength);
 		in.read(&block->hashBl[0], hashLength);
-
+		std::cout << "Deserializing Block - content_offset: " << block->content_offset
+			<< ", block_offset: " << block->block_offset
+			<< ", numberOfFiles: " << block->numberOfFiles
+			<< ", size: " << block->size
+			<< ", checksum: " << block->checksum
+			<< ", hashBl: " << block->hashBl << std::endl;
 		return block;
 
 	}
@@ -529,7 +543,7 @@ struct Block {
 		size = buffersize;
 		numberOfFiles = 1;
 		container.clear();
-		container.seekp(offset);
+		container.seekp(offset, ios::beg);
 
 		// computer checksum (somple XOR checksum)
 		checksum = 0;
@@ -539,22 +553,24 @@ struct Block {
 
 		// write the block's data to thec ontainer
 		content_offset = offset + sizeof(Block);
-		
-		container.clear();
-		container.seekp(offset);
 		if (!container) {
 			throw runtime_error("Error: Failed to seek to block offset");
 		}
 		serialize(container);
 		
 		// Write the block's data to the container
-		container.seekp(content_offset);
+		container.clear();
+		container.seekp(content_offset, ios::beg);
 		if (!container) {
 			throw runtime_error("Error: Failed to see to content offset");
 		}
 		container.write(buffer, buffersize);
 		if (!container) {
 			throw runtime_error("Error: Failed to write blocjk data to container");
+		}
+		container.flush();
+		if (!container) {
+			throw runtime_error("Error: Failed to flush the container stream");
 		}
 
 	}
@@ -624,10 +640,10 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}*/
 	string fileSystem = "container.bin";
-	string newDir = "Ehee";
+	string newDir = "Ehaa";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	string fileName = "Ehee\\mehe.txt";
-	string pathLS = "cpin";
+	string fileName = "hehe.txt";
+
 	ResourceManager resource(fileSystem);
 	string command = "cpin";
 	if (command == "md") {
@@ -640,10 +656,10 @@ int main(int argc, char* argv[]) {
 		ls(resource, newDir);
 	}
 	else if (command == "cpout") {
-		cpout(resource,pathLS,"C:\\Users\\vboxuser\\Desktop\\eheeee.txt");
+		cpout(resource,newDir,"C:\\Users\\vboxuser\\Desktop\\eheeee.txt");
 	}
 	else if (command == "rm") {
-		rm(resource, pathLS);
+		rm(resource, newDir);
 	}
 	else if (command == "cd") {
 		cd(resource,newDir);
@@ -874,9 +890,9 @@ uint64_t getMetadataOff(ResourceManager& re, Metadata& fileMeta) {
 
 	}
 	else {
-		containerWrite.clear();
-		containerWrite.seekp(0, ios::end);
-		metaOff = containerWrite.tellp();
+		containerRead.clear();
+		containerRead.seekg(0, ios::end);
+		metaOff = containerRead.tellg();
 		// Increment id for the next meta because we wont be using the deleted
 		re.incrementId();
 	}
@@ -1221,6 +1237,8 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		}
 		parent_offset = offsets.back();
 		fileName = directories.back();
+		delete parentMeta;
+		delete childMeta;
 	}
 	else if(directories.size() == 1 && hasExtention(directories.back()) && checkNames(containerRead,currentDirectoryOffset, fileName)) {
 		parent_offset = currentDirectoryOffset; 
@@ -1232,7 +1250,14 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 
 	ofstream& containerWrite = re.getOutputStream();
 	containerWrite.clear();
+	containerRead.clear();
 
+	// GET THE PARENT OF THE FILE
+	containerRead.seekg(parent_offset, ios::beg);
+	// this is the parent of the actual file that we are adding
+	Metadata* parent = Metadata::deserialize(containerRead);
+
+	// CREATE THE FILE
 	// Metadata for the file
 	Metadata fileMeta;
 	strncpy_s(fileMeta.name, fileName.c_str(), sizeof(fileMeta.name));
@@ -1240,7 +1265,24 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	fileMeta.isDeleted = false;
 	fileMeta.size = 0;
 	fileMeta.parent = parent_offset;
-	fileMeta.id += re.getNextId();
+	fileMeta.id = re.getNextId();
+
+	// first file metaoffset is 190 
+	uint64_t metaOff = getMetadataOff(re, fileMeta);
+	
+	// SERIALIZE THE FILEMETA
+	fileMeta.offset = metaOff;
+	re.getMetadataHashTable().insert(fileMeta.makeKey(), fileMeta.offset);
+
+	// ADD THE FILEMETA OFFSET TO THE PARENT
+	parent->children.push_back(fileMeta.offset);
+
+	// serialize because of the offset we need it to be reserved
+	containerWrite.clear();
+	containerWrite.seekp(metaOff, ios::beg);
+	fileMeta.serialize(containerWrite);
+	containerWrite.flush();
+
 
 
 
@@ -1250,7 +1292,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	size_t filesize = src.tellg();
 	src.seekg(0, ios::beg);
 	
-
+	// --------------------------- CALCULATION OF THE REQUIRED BLOCKS
 	// Calculate the required number of blocks
 	size_t requiredBlocks = (filesize + blockSize - 1) / blockSize; // ceiling divisiopn
 
@@ -1288,12 +1330,15 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		// block doesnt exitsts
 		if (!re.getBlockHashTable().exists(block.hashBl)) {
 			block.writeToContainer(containerWrite, buffer, bytesRead, allocatedBlocks[i]);
-
 			// add the block hjash to tghe hashtable
 			re.getBlockHashTable().insert(block.hashBl, block.block_offset);
 		}
 		else { // this here means that the block exist and i need to get it and add 1 to numberOfFiles
 			uint64_t off = re.getBlockHashTable().get(block.hashBl);
+			// Validate the offset
+			if (off < 0 || off > containerRead.tellg()) {
+				throw std::runtime_error("Invalid offset retrieved from the hash table");
+			}
 			containerRead.clear();
 			containerRead.seekg(off, ios::beg);
 			Block* bl = Block::deserialize(containerRead);
@@ -1309,24 +1354,11 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		fileMeta.keys.push_back(block.hashBl);
 		remainingSize -= bytesRead;
 	}
-	//fileMeta.offset = container.tellp();
-	uint64_t metaOff = getMetadataOff(re, fileMeta);
 
-	fileMeta.offset = metaOff;
 	containerWrite.clear();
 	containerWrite.seekp(metaOff, ios::beg);
 	fileMeta.serialize(containerWrite);
-	containerWrite.flush();
-	re.getMetadataHashTable().insert(fileMeta.makeKey(), fileMeta.offset);
-
-	printMeta(re,fileMeta.offset);
-
-	// we need to update parent meta children
-	containerRead.clear();
-	containerRead.seekg(parent_offset, ios::beg);
-	// this is the parent of the actual file that we are adding
-	Metadata* parent = Metadata::deserialize(containerRead);
-	parent->children.push_back(fileMeta.offset);
+	
 	// Right here we need to loop over every parent till we reach the root and update their sizes 
 	uint64_t offset = parent_offset;
 	while (true) { // -1 because the parent of the root is -1 by default
@@ -1340,6 +1372,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		// delete current meta
 
 		delete parent;
+		parent = nullptr;
 		// check if the next offset is the root parent which doesnt exist and thats why we break
 		if (offset == -1) break;
 		//deserialize the parent of the current meta
@@ -1347,8 +1380,8 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		containerRead.seekg(offset, ios::beg);
 		parent = Metadata::deserialize(containerRead);
 	}
-
-
+	containerWrite.clear();
+	containerWrite.flush();
 
 
 	// Write metadata to the container 
@@ -1444,6 +1477,7 @@ void md(ResourceManager& re, string& directoryName) {
 	}
 	ofstream& containerWrite = re.getOutputStream();
 	containerWrite.clear();
+	containerWrite.flush();
 
 	container.seekg(parent_offset, ios::beg);
 	Metadata* currentMeta = Metadata::deserialize(container);
