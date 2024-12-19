@@ -7,9 +7,40 @@
 #include <list>
 #include <string>
 #include <functional> 
+#include <type_traits>
+
 
 
 using namespace std;
+template <typename T>
+char* my_string(T value) {
+	static_assert(is_integral<T>::value, "Only integral types are supported");
+	static char buffer[21]; // Large enough for signed 64-bit numbers
+	int index = 20;
+	buffer[index] = '\0'; // null terminate the string
+
+	bool is_Negative = false;
+
+	// Handle negative values for signed types
+	if constexpr (is_signed<T>::value) {
+		if (value < 0) {
+			is_Negative = true;
+			value = -value; // Convert to positive for processing
+		}
+	}
+
+	do {
+		buffer[--index] = '0' + (value % 10); // extract the last digit
+		value /= 10;
+	} while (value > 0);
+
+	if (is_Negative) {
+		buffer[--index] = '-'; // add the negative sign if needed 
+	}
+
+	return &buffer[index]; // return a pointer to the start of the valids tring
+
+}
 struct Metadata {
 	// if we have metas with the same names we can use numbering method (we can use incremental numbering)
 	char name[100]; // file or directory name
@@ -98,6 +129,10 @@ struct Metadata {
 
 	}
 
+	string makeKey() {
+		return string(name) +"_"+my_string(id);
+	}
+
 };
 
 class HashTable {
@@ -118,6 +153,13 @@ public:
 	// Insert a key value pair
 	void insert(const string& key, const uint64_t& value) {
 		int index = hashFunction(key);
+
+		for (auto& kv : table[index]) {
+			if (kv.first == key) {
+				kv.second = value;
+				return;
+			}
+		}
 		table[index].emplace_back(key, value);
 	}
 
@@ -144,6 +186,19 @@ public:
 		}
 		return false;
 	}
+
+	// this os only for metadata because they have duplicate names
+	bool findByBaseName(const string& baseName) {
+
+		for (int i = 0; i < TABLE_SIZE; ++i) {
+			for (const auto& kv : table[i]) {
+				if (kv.first.find(baseName + "_") == 0) {
+					return true;
+				}
+			}
+		}
+	}
+
 
 	bool remove(const string& key) {
 		int index = hashFunction(key);
@@ -542,6 +597,7 @@ vector<string> split(const char* str, char delimeter) {
 
 }
 
+
 void InsertionSort(vector<uint64_t>& array);
 std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
 void rm(ResourceManager& re, string& fileName, uint64_t parentoffset=-1);
@@ -681,7 +737,7 @@ void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			// check if current folder doesnt exist in the meta table
 
-			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
+			if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
@@ -797,12 +853,35 @@ void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
 	child->serialize(containerWrite);
 	// add it to the free meta file
 	re.getFreeMeta().push_back(child_offset);
-	re.getMetadataHashTable().remove(string(child->name));
+	re.getMetadataHashTable().remove(child->makeKey());
 	delete parent;
 	delete child;
 }
 
+uint64_t getMetadataOff(ResourceManager& re, Metadata& fileMeta) {
+	ifstream& containerRead = re.getInputStream();
+	ofstream& containerWrite = re.getOutputStream();
+	uint64_t metaOff;
+	if (!re.getFreeMeta().empty()) {
+		metaOff = re.getFreeMeta().back();
+		re.getFreeMeta().pop_back();
+		// we need to get the deleted filemeta id and use it  in the new and not overwrite it
+		containerRead.clear();
+		containerRead.seekg(metaOff, ios::beg);
+		Metadata* deletedMeta = Metadata::deserialize(containerRead);
+		fileMeta.id = deletedMeta->id;
+		delete deletedMeta;
 
+	}
+	else {
+		containerWrite.clear();
+		containerWrite.seekp(0, ios::end);
+		metaOff = containerWrite.tellp();
+		// Increment id for the next meta because we wont be using the deleted
+		re.incrementId();
+	}
+	return metaOff;
+}
 
 void ls(ResourceManager& re, string path) {
 	ifstream& containerRead = re.getInputStream();
@@ -818,7 +897,7 @@ void ls(ResourceManager& re, string path) {
 			// check if current folder doesnt exist in the meta table
 			// checking if dir doesnt exist in the hashtable 
 			// here the last name must be a dir
-			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
+			if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
@@ -954,7 +1033,7 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			// check if current folder doesnt exist in the meta table
-			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
+			if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
@@ -1093,7 +1172,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			// check if current folder doesnt exist in the meta table
-			 if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
+			 if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
@@ -1162,7 +1241,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	fileMeta.size = 0;
 	fileMeta.parent = parent_offset;
 	fileMeta.id += re.getNextId();
-	re.incrementId();
+
 
 
 
@@ -1230,24 +1309,15 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		fileMeta.keys.push_back(block.hashBl);
 		remainingSize -= bytesRead;
 	}
-	string str(fileMeta.name);
 	//fileMeta.offset = container.tellp();
-	uint64_t metaOff;
-	if (!re.getFreeMeta().empty()) {
-		metaOff = re.getFreeMeta().back();
-		re.getFreeMeta().pop_back();
-	}
-	else {
-		containerWrite.clear();
-		containerWrite.seekp(0, ios::end);
-		metaOff = containerWrite.tellp();
-	}
+	uint64_t metaOff = getMetadataOff(re, fileMeta);
+
 	fileMeta.offset = metaOff;
 	containerWrite.clear();
 	containerWrite.seekp(metaOff, ios::beg);
 	fileMeta.serialize(containerWrite);
 	containerWrite.flush();
-	re.getMetadataHashTable().insert(str, fileMeta.offset);
+	re.getMetadataHashTable().insert(fileMeta.makeKey(), fileMeta.offset);
 
 	printMeta(re,fileMeta.offset);
 
@@ -1324,7 +1394,7 @@ void md(ResourceManager& re, string& directoryName) {
 	if (directories.size() > 1 && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			// we need to check also if the dir is some of the first because the last doesnt exist;
-			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
+			if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
@@ -1385,16 +1455,16 @@ void md(ResourceManager& re, string& directoryName) {
 	newDirMeta->size = 0;
 	newDirMeta->parent = parent_offset;
 	newDirMeta->isDeleted = false;
+	newDirMeta->id = re.getNextId();
 
 	// Determine the offset for the new directory metadata
-	containerWrite.seekp(0, ios::end);
-	uint64_t newdirOffset = containerWrite.tellp();
+	uint64_t newdirOffset = getMetadataOff(re, *newDirMeta);
 	newDirMeta->offset = newdirOffset;
 
 	// Write new directory metadata with the new child
 	containerWrite.seekp(newdirOffset, ios::beg);
 	newDirMeta->serialize(containerWrite);
-	re.getMetadataHashTable().insert(string(newDirMeta->name), newdirOffset);
+	re.getMetadataHashTable().insert(newDirMeta->makeKey(), newdirOffset);
 
 
 	// Update current direcotry metadata wioth the new child
@@ -1420,7 +1490,7 @@ void cd(ResourceManager& re, string& directoryName) {
 		for (const auto& dir : directories) {
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			uint64_t offset;
-			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
+			if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
@@ -1540,7 +1610,7 @@ void rd(ResourceManager& re, string& dirName) {
 		for (const auto& dir : directories) {
 			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
-			if (!re.getMetadataHashTable().exists(dir) && directories.back() != dir) {
+			if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
