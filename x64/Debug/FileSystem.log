@@ -1,11 +1,11 @@
 ﻿  FileName.cpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.41.34120\include\filesystem(12): warning STL4038: The contents of <filesystem> are available only with C++17 or later.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(25,2): warning C4984: 'if constexpr' is a C++17 language extension
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(708,11): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(708,11): warning C4244:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(708,11): warning C4244:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(708,11): warning C4244:             _Ty=uint64_t
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(708,11): warning C4244:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1365,23): warning C4018: '>': signed/unsigned mismatch
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(224,1): warning C4715: 'HashTable::findByBaseName': not all control paths return a value
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(29,2): warning C4984: 'if constexpr' is a C++17 language extension
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(784,11): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(784,11): warning C4244:         with
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(784,11): warning C4244:         [
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(784,11): warning C4244:             _Ty=uint64_t
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(784,11): warning C4244:         ]
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1444,23): warning C4018: '>': signed/unsigned mismatch
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(251,1): warning C4715: 'HashTable::findByBaseName': not all control paths return a value
   FileSystem.vcxproj -> C:\Users\vboxuser\source\repos\FileSystem\x64\Debug\FileSystem.exe
