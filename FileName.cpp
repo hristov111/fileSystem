@@ -45,8 +45,9 @@ char* my_string(T value) {
 	return &buffer[index]; // return a pointer to the start of the valids tring
 
 }
+
+#pragma pack(push, 1)
 struct Metadata {
-	// if we have metas with the same names we can use numbering method (we can use incremental numbering)
 	char name[100]; // file or directory name
 	size_t id;
 	bool isDirectory; // True if it's a directory
@@ -56,7 +57,6 @@ struct Metadata {
 	vector<uint64_t> children; // offsets of child files or directories 
 	uint64_t parent; // Parent directory's index in the metadata (0 for root)
 	bool isDeleted;
-
 	void serialize(std::ofstream& out) {
 		cout << "FileMeta name: " << name << endl
 			<< "FileMeta size: " << size << endl
@@ -95,7 +95,7 @@ struct Metadata {
 		for (const auto& child : children) {
 			out.write(reinterpret_cast<const char*>(&child), sizeof(child));
 		}
-
+		out.flush();
 
 
 
@@ -163,7 +163,7 @@ struct Metadata {
 
 	uint64_t getSerializedSize() const {
 		uint64_t fixedSize = sizeof(name) + sizeof(id) + sizeof(isDirectory)
-			+ sizeof(isDeleted) + sizeof(size) + sizeof(parent);
+			+ sizeof(isDeleted) + sizeof(size) + sizeof(parent) + sizeof(offset);
 
 		// dynamic size member keys (vector<string>)
 		uint64_t keysSize = sizeof(size_t);
@@ -185,14 +185,17 @@ struct Metadata {
 
 
 };
+#pragma pack(pop)
 
+
+template<typename Key, typename Value> 
 class HashTable {
 private:
 	static const int TABLE_SIZE = 100;
-	std::list<std::pair<string, uint64_t>> table[TABLE_SIZE];
+	std::list<std::pair<Key, Value>> table[TABLE_SIZE];
 
 	// custom hash function
-	int hashFunction(const std::string& key) const {
+	int hashFunction(const Key& key) const {
 		int hash = 0;
 		for (char c : key) {
 			hash = (hash * 31 + c) % TABLE_SIZE;
@@ -202,7 +205,7 @@ private:
 
 public:
 	// Insert a key value pair
-	void insert(const string& key, const uint64_t& value) {
+	void insert(const Key& key, const Value& value) {
 		int index = hashFunction(key);
 
 		for (auto& kv : table[index]) {
@@ -215,7 +218,7 @@ public:
 	}
 
 	// retrieve a value by key
-	uint64_t get(const std::string& key) const {
+	uint64_t get(const Key& key) const {
 		int index = hashFunction(key);
 
 		for (const auto& kv : table[index]) {
@@ -227,7 +230,7 @@ public:
 		throw std::runtime_error("Key not found in the hash table");
 	}
 
-	bool exists(const string& key) const {
+	bool exists(const Key& key) const {
 		int index = hashFunction(key);
 
 		for (const auto& kv : table[index]) {
@@ -239,7 +242,7 @@ public:
 	}
 
 	// this os only for metadata because they have duplicate names
-	bool findByBaseName(const string& baseName) {
+	bool findByBaseName(const Key& baseName) {
 
 		for (int i = 0; i < TABLE_SIZE; ++i) {
 			for (const auto& kv : table[i]) {
@@ -248,6 +251,7 @@ public:
 				}
 			}
 		}
+		return false;
 	}
 
 
@@ -263,7 +267,7 @@ public:
 		return false; // key not found
 	}
 
-	void iterate(std::function<void(const std::string&, uint64_t&)> func) {
+	void iterate(function<void(const string&, uint64_t&)> func) {
 		for (int i = 0; i < TABLE_SIZE; ++i) {
 			for (auto& kv : table[i]) {
 				func(kv.first, kv.second);
@@ -333,8 +337,8 @@ private:
 	ofstream outputStream;
 	vector<uint64_t> freeBlocks;
 	vector<uint64_t> freeMeta;
-	HashTable blockHashTable;
-	HashTable metadataHashtable;
+	HashTable<string, uint64_t> blockHashTable;
+	HashTable<string, uint64_t> metadataHashtable;
 	string fileName;
 	// this is for the fileMeta idenitfier if it has 
 	size_t id = 0;
@@ -413,11 +417,11 @@ private:
 
 
 		cout << "Container initialized with root directory.\n";
-
-		size_t placeholder = 0; // reserved for the hashtables and vectors offsets
-		for (size_t i = 0; i < 5; ++i) {
-			container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
-		}
+		// for now we have 150 for the actual root dir serializaion and now 5* 8 = 40 for the offsets of vectors and hashtables, so we start at 190
+		//size_t placeholder = 0; // reserved for the hashtables and vectors offsets
+		//for (size_t i = 0; i < 5; ++i) {
+		//	container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
+		//}
 
 		container.close();
 
@@ -494,10 +498,10 @@ public:
 		return freeMeta;
 	}
 
-	HashTable& getBlockHashTable() {
+	HashTable<string, uint64_t>& getBlockHashTable() {
 		return blockHashTable;
 	}
-	HashTable& getMetadataHashTable() {
+	HashTable<string, uint64_t>& getMetadataHashTable() {
 		return metadataHashtable;
 	}
 
@@ -544,7 +548,7 @@ public:
 uint64_t currentDirectoryOffset = 0;
 // this needs to be serialized and deserialzied
 
-
+#pragma pack(push, 1)
 struct Block {
 	uint64_t content_offset; // offset of the block content
 	uint64_t block_offset; // offset of the block metadata
@@ -652,6 +656,7 @@ struct Block {
 	}
 
 };
+#pragma pack(pop)
 
 vector<string> split(const char* str, char delimeter) {
 	vector<string> res;
@@ -679,8 +684,51 @@ vector<string> split(const char* str, char delimeter) {
 	return res;
 
 }
-void dfs() {
+void dfs(ResourceManager& re,ofstream& containerWrite, ifstream& containerRead,Metadata& parent,HashTable<string, uint64_t>& dp, uint64_t newSize, uint64_t base_offset) {
 
+	string key = parent.makeKey();
+	// check if the value for this parent is already computed 
+	if (dp.exists(key)) {
+		return;
+	}
+	dp.insert(key, parent.offset);
+
+	for (auto& childoffset : parent.children) {
+		// update the current offset of the child that we wanna deserialize
+		if (base_offset > childoffset) {
+			continue;
+		}
+		containerRead.clear();
+		containerRead.seekg(childoffset, ios::beg);
+		Metadata* childMeta = Metadata::deserialize(containerRead);
+		if (childMeta->isDirectory) {
+			dfs(re, containerWrite, containerRead, *childMeta, dp, newSize, base_offset);
+		}
+		else { // the file is not directory and we need to fix block offset and content offsets
+			for (auto& key: childMeta->keys) {
+				uint64_t offset = re.getBlockHashTable().get(key);
+				if (base_offset > offset || dp.exists(key)) {
+					continue;
+				}
+				containerRead.clear();
+				containerRead.seekg(offset, ios::beg);
+				Block* bl = Block::deserialize(containerRead);
+				bl->block_offset += newSize;
+				bl->content_offset += newSize;
+				containerWrite.clear();
+				containerWrite.seekp(bl->block_offset, ios::beg);
+				bl->serialize(containerWrite);
+				dp.insert(bl->hashBl, bl->block_offset);
+				delete bl;
+			}
+		}
+		childoffset += newSize;
+		childMeta->offset = childoffset;
+		containerWrite.clear();
+		containerWrite.seekp(childMeta->offset, ios::beg);
+		childMeta->serialize(containerWrite);
+		delete childMeta;
+	}
 }
 void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& parent , uint64_t newSize) {
 
@@ -689,22 +737,22 @@ void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& paren
 		int64_t sizeDifference = newSize - oldSize;
 
 		// here we need to implement deph first seach
-
+		HashTable<string, uint64_t> dp;
 
 		// Update offsets in the hashtable
+		auto& metaHaSh = re.getMetadataHashTable();
+		metaHaSh.iterate([&](const string& key, uint64_t& of) {
+			if (parent.offset < of) {
+				of += sizeDifference; // Shift subsequent offsets
+			}
+		});
+		dfs(re,re.getOutputStream(),re.getInputStream(),parent,dp, sizeDifference,parent.offset);
 		auto& hashtable = re.getBlockHashTable();
 		hashtable.iterate([&](const string& key, uint64_t& of) {
-			if (of > parent.offset) {
+			if (parent.offset < of) {
 				of += sizeDifference; // Shift subsequent offsets
 			}
 			});
-		auto& metaHaShtable = re.getMetadataHashTable();
-		metaHaShtable.iterate([&](const string& key, uint64_t& of) {
-			if (of > parent.offset) {
-				of += sizeDifference; // Shift subsequent offsets
-			}
-			});
-
 		for (auto& off : re.getFreeblocks()) {
 			if (off > parent.offset) {
 				off += sizeDifference;
@@ -1378,25 +1426,28 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	
 	// SERIALIZE THE FILEMETA
 	fileMeta.offset = metaOff;
-	re.getMetadataHashTable().insert(fileMeta.makeKey(), fileMeta.offset);
+	string key1 = fileMeta.makeKey();
+	re.getMetadataHashTable().insert(key1, fileMeta.offset);
 
 	// ADD THE FILEMETA OFFSET TO THE PARENT and serialize - here we need to update susbequent
 
 	uint64_t oldsize = parent->getSerializedSize();
 	parent->children.push_back(fileMeta.offset);
+	parent->children.push_back(12);
+
+
+	uint64_t newSize = parent->getSerializedSize();
+	uint64_t metaOff2 = getMetadataOff(re, containerRead, fileMeta);
+
+	updateInMemoryOffsets(re, oldsize, *parent, newSize);
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
 	parent->serialize(containerWrite);
-	uint64_t newSize = parent->getSerializedSize();
-	updateInMemoryOffsets(re,oldsize,*parent,newSize);
-
 	// serialize because of the offset we need it to be reserved
+
 	containerWrite.clear();
 	containerWrite.seekp(metaOff, ios::beg);
 	fileMeta.serialize(containerWrite);
-	containerWrite.flush();
-
-
 
 
 
@@ -1436,7 +1487,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		src.read(buffer, chunk_size);
 		size_t bytesRead = src.gcount();
 
-		uint64_t oldSize = fileMeta.getSerializedSize();;
+		uint64_t oldSize = fileMeta.getSerializedSize();
 		Block block;
 		block.hashBl = block.hashBlock(buffer, bytesRead);
 		block.size = bytesRead;
@@ -1474,9 +1525,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	containerWrite.clear();
 	containerWrite.seekp(metaOff, ios::beg);
 	fileMeta.serialize(containerWrite);
-	updateInMemoryOffsets(re,oldsize,fileMeta.offset,fileMeta.getSerializedSize());
-	containerWrite.flush();
-
+	updateInMemoryOffsets(re,oldsize,fileMeta,fileMeta.getSerializedSize());
 	
 	// Right here we need to loop over every parent till we reach the root and update their sizes 
 	uint64_t offset = parent_offset;
@@ -1486,8 +1535,6 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		containerWrite.clear();
 		containerWrite.seekp(offset, ios::beg);
 		parent->serialize(containerWrite);
-		containerWrite.flush();
-
 		// take the parent of the current meta
 		offset = parent->parent;
 		// delete current meta
@@ -1501,8 +1548,6 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		containerRead.seekg(offset, ios::beg);
 		parent = Metadata::deserialize(containerRead);
 	}
-	containerWrite.clear();
-
 	// Write metadata to the container 
 	cout << "File copied to container.\n";
 }
