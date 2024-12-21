@@ -16,6 +16,8 @@
 
 using namespace std;
 
+enum StructType {METADATA , BLOCK};
+
 template <typename T>
 char* my_string(T value) {
 	static_assert(is_integral<T>::value, "Only integral types are supported");
@@ -333,6 +335,7 @@ public:
 };
 class ResourceManager {
 private:
+	uint64_t currentDirectoryOffset = 0;
 	ifstream inputStream;
 	ofstream outputStream;
 	vector<uint64_t> freeBlocks;
@@ -398,6 +401,13 @@ private:
 		if (!container) {
 			throw runtime_error("Error: Cannot create container file");
 		}
+		// we first write the offsets for the vectors and hashtables because they wont change in size
+		container.clear();
+		container.seekp(0, ios::beg);
+		size_t placeholder = 0; // reserved for the hashtables and vectors offsets
+		for (size_t i = 0; i < 5; ++i) {
+			container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
+		}
 
 		// Create the root directory metadata
 		Metadata rootDir;
@@ -409,21 +419,18 @@ private:
 		rootDir.id = id;
 		incrementId();
 
-		rootDir.offset = 0;
+		container.clear();
+		container.seekp(0, ios::end);
+		rootDir.offset = container.tellp();
+		container.clear();
 		container.seekp(rootDir.offset, ios::beg);
+		rootDir.serialize(container);
 		// Write the root directory metadata to the container
 		metadataHashtable.insert("/", rootDir.offset);
-		rootDir.serialize(container);
+		currentDirectoryOffset = rootDir.offset;
 
 
 		cout << "Container initialized with root directory.\n";
-		// for now we have 150 for the actual root dir serializaion and now 5* 8 = 40 for the offsets of vectors and hashtables, so we start at 190
-		//size_t placeholder = 0; // reserved for the hashtables and vectors offsets
-		//for (size_t i = 0; i < 5; ++i) {
-		//	container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
-		//}
-
-		container.close();
 
 		inputStream.open(fileName, ios::binary | ios::in);
 		outputStream.open(fileName, ios::binary | ios::in | ios::out);
@@ -441,16 +448,10 @@ public:
 		}
 		inputStream.clear();
 		// in order to go to that offset we need to deserialize the root calculate the offset dynamically and then
-		inputStream.seekg(0, ios::beg);
-		Metadata* root = Metadata::deserialize(inputStream);
-		if (!root) {
-			throw std::runtime_error("Error: Failed to deserialize root metadata.");
-		}
-		inputStream.clear();
 
+		
 
-		inputStream.seekg(root->getSerializedSize() , ios::beg);
-		delete root;
+		inputStream.seekg(0,ios::beg);
 
 		inputStream.read(reinterpret_cast<char*>(&id), sizeof(id));
 
@@ -480,13 +481,15 @@ public:
 			metadataHashtable.deserialize(inputStream);
 		}
 
-
+		currentDirectoryOffset = metadataHashtable.get("/");
 
 
 	}
 
 	ifstream& getInputStream() { return inputStream; }
 	ofstream& getOutputStream() { return outputStream; }
+
+	uint64_t& getCurrentDirOffset() { return currentDirectoryOffset; }
 
 	size_t& getNextId() { return id; }
 	void incrementId() { id++; }
@@ -527,7 +530,7 @@ public:
 		hash2Offset = outputStream.tellp();
 		metadataHashtable.serialize(outputStream);
 
-		outputStream.seekp(sizeof(Metadata), ios::beg);
+		outputStream.seekp(0, ios::beg);
 		outputStream.write(reinterpret_cast<const char*>(&id), sizeof(id));
 
 		outputStream.write(reinterpret_cast<const char*>(&vec1Offset), sizeof(vec1Offset));
@@ -544,11 +547,8 @@ public:
 	}
 
 };
-
-uint64_t currentDirectoryOffset = 0;
 // this needs to be serialized and deserialzied
 
-#pragma pack(push, 1)
 struct Block {
 	uint64_t content_offset; // offset of the block content
 	uint64_t block_offset; // offset of the block metadata
@@ -603,6 +603,13 @@ struct Block {
 		return block;
 
 	}
+	size_t getSerializedSize() const {
+		size_t fiexedSize = sizeof(content_offset) + sizeof(block_offset) + sizeof(numberOfFiles)
+			+ sizeof(size) + sizeof(checksum);
+
+		size_t dynamicsize = sizeof(size_t) + hashBl.size();
+		return fiexedSize + dynamicsize;
+	}
 	void writeToContainer(std::ofstream& container, const char* buffer, size_t buffersize, uint64_t offset) {
 		block_offset = offset;
 		size = buffersize;
@@ -617,7 +624,7 @@ struct Block {
 		}
 
 		// write the block's data to thec ontainer
-		content_offset = offset + sizeof(Block);
+		content_offset = offset + getSerializedSize();
 		if (!container) {
 			throw runtime_error("Error: Failed to seek to block offset");
 		}
@@ -647,16 +654,28 @@ struct Block {
 		return hash;
 	}
 
-	size_t getSerializedSize() const {
-		size_t fiexedSize = sizeof(content_offset) + sizeof(block_offset) + sizeof(numberOfFiles)
-			+ sizeof(size) + sizeof(checksum);
-
-		size_t dynamicsize = sizeof(size_t) + hashBl.size();
-		return fiexedSize + dynamicsize;
-	}
+	
 
 };
-#pragma pack(pop)
+
+void InsertionSort(vector<uint64_t>& array, bool descending = false);
+std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
+void rm(ResourceManager& re, string& fileName, uint64_t actualOffset = -1);
+void InitializeContainer(ResourceManager& re, string& containerPath);
+void ls(ResourceManager& re, string path = "");
+void printBlockAndContent(ResourceManager& re, uint64_t offset);
+void printMeta(ResourceManager& re, uint64_t offset);
+void cpout(ResourceManager& re, string fileName, const string outputPath);
+bool hasExtention(const string& fileName);
+void cpin(ResourceManager& re, string& sourceName, string& fileName, size_t blockSize);
+void md(ResourceManager& re, string& directoryName);
+void cd(ResourceManager& re, string& directoryName);
+void cdDots(ResourceManager& re);
+void cdRoot(ResourceManager& re);
+void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite, Metadata* currentMeta);
+void rd(ResourceManager& re, string& dirName);
+bool checkNames(ifstream& container, uint64_t parent_offset, string dirName);
+uint64_t getMetadataOff(ResourceManager& re, ofstream& contianerWrite, ifstream& containerRead, Metadata& fileMeta);
 
 vector<string> split(const char* str, char delimeter) {
 	vector<string> res;
@@ -684,7 +703,23 @@ vector<string> split(const char* str, char delimeter) {
 	return res;
 
 }
-void dfs(ResourceManager& re,ofstream& containerWrite, ifstream& containerRead,Metadata& parent,HashTable<string, uint64_t>& dp, uint64_t newSize, uint64_t base_offset) {
+
+void getBlockOffsets(ResourceManager& re,Metadata& childMeta, vector<uint64_t>& for_upgrading, vector<StructType>& types, uint64_t base_offset, HashTable<string, uint64_t>& dp) {
+	for (auto& key : childMeta.keys) {
+		uint64_t off = re.getBlockHashTable().get(key);
+		if (base_offset > off || dp.exists(key)) {
+			continue;
+		}
+		dp.insert(key, off);
+		for_upgrading.push_back(off);
+		types.push_back(BLOCK);
+
+	}
+}
+
+
+// the plan is this - we go through every dir and ile and put them in a vector of offsets
+void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<string, uint64_t>& dp, uint64_t base_offset, vector<uint64_t>& for_upgrading, vector<StructType>&types) {
 
 	string key = parent.makeKey();
 	// check if the value for this parent is already computed 
@@ -692,41 +727,27 @@ void dfs(ResourceManager& re,ofstream& containerWrite, ifstream& containerRead,M
 		return;
 	}
 	dp.insert(key, parent.offset);
+	if (!parent.children.size()) {
+		getBlockOffsets(re, parent, for_upgrading, types, base_offset, dp);
 
-	for (auto& childoffset : parent.children) {
+	}
+
+	for (auto& child_offset: parent.children){
 		// update the current offset of the child that we wanna deserialize
-		if (base_offset > childoffset) {
+		if (base_offset > child_offset) {
 			continue;
 		}
+		for_upgrading.push_back(child_offset);
+		types.push_back(METADATA);
 		containerRead.clear();
-		containerRead.seekg(childoffset, ios::beg);
+		containerRead.seekg(child_offset, ios::beg);
 		Metadata* childMeta = Metadata::deserialize(containerRead);
 		if (childMeta->isDirectory) {
-			dfs(re, containerWrite, containerRead, *childMeta, dp, newSize, base_offset);
+			dfs(re,containerRead, *childMeta, dp, base_offset, for_upgrading,types);
 		}
 		else { // the file is not directory and we need to fix block offset and content offsets
-			for (auto& key: childMeta->keys) {
-				uint64_t offset = re.getBlockHashTable().get(key);
-				if (base_offset > offset || dp.exists(key)) {
-					continue;
-				}
-				containerRead.clear();
-				containerRead.seekg(offset, ios::beg);
-				Block* bl = Block::deserialize(containerRead);
-				bl->block_offset += newSize;
-				bl->content_offset += newSize;
-				containerWrite.clear();
-				containerWrite.seekp(bl->block_offset, ios::beg);
-				bl->serialize(containerWrite);
-				dp.insert(bl->hashBl, bl->block_offset);
-				delete bl;
-			}
+			getBlockOffsets(re, *childMeta, for_upgrading, types, base_offset, dp);
 		}
-		childoffset += newSize;
-		childMeta->offset = childoffset;
-		containerWrite.clear();
-		containerWrite.seekp(childMeta->offset, ios::beg);
-		childMeta->serialize(containerWrite);
 		delete childMeta;
 	}
 }
@@ -738,15 +759,51 @@ void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& paren
 
 		// here we need to implement deph first seach
 		HashTable<string, uint64_t> dp;
+		// offsets that we need to loop deserialize change them and serialize again (first we need to sor them)
+		vector<uint64_t> offsets;
+		vector<StructType> types;
 
 		// Update offsets in the hashtable
+		dfs(re,re.getInputStream(),parent,dp,parent.offset,offsets,types);
+		InsertionSort(offsets,true);
+		ofstream& contasinerWrite = re.getOutputStream();
+		ifstream& containerRead = re.getInputStream();
+
+		for (int i = 0; i < offsets.size(); ++i) {
+			uint64_t curr_offset = offsets[i];
+			StructType curr_type = types[i];
+
+			if (curr_type == METADATA) {
+				containerRead.clear();
+				containerRead.seekg(curr_offset, ios::beg);
+				Metadata* meta = Metadata::deserialize(containerRead);
+				meta->offset += sizeDifference;
+				contasinerWrite.clear();
+				contasinerWrite.seekp(meta->offset, ios::beg);
+				meta->serialize(contasinerWrite);
+				delete meta;
+			}
+			else if(curr_type == BLOCK) {
+				containerRead.clear();
+				containerRead.seekg(curr_offset, ios::beg);
+				Block* block = Block::deserialize(containerRead);
+				block->block_offset += sizeDifference;
+				char buffer[4096];
+				containerRead.clear();
+				containerRead.seekg(block->content_offset, ios::beg);
+				containerRead.read(buffer, block->size);
+				block->writeToContainer(contasinerWrite,buffer,block->size,block->block_offset);
+			}
+		}
+
+
 		auto& metaHaSh = re.getMetadataHashTable();
 		metaHaSh.iterate([&](const string& key, uint64_t& of) {
 			if (parent.offset < of) {
 				of += sizeDifference; // Shift subsequent offsets
 			}
 		});
-		dfs(re,re.getOutputStream(),re.getInputStream(),parent,dp, sizeDifference,parent.offset);
+
 		auto& hashtable = re.getBlockHashTable();
 		hashtable.iterate([&](const string& key, uint64_t& of) {
 			if (parent.offset < of) {
@@ -768,24 +825,6 @@ void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& paren
 
 }
 
-void InsertionSort(vector<uint64_t>& array);
-std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
-void rm(ResourceManager& re, string& fileName, uint64_t actualOffset =-1);
-void InitializeContainer(ResourceManager& re, string& containerPath);
-void ls(ResourceManager& re, string path = "");
-void printBlockAndContent(ResourceManager& re, uint64_t offset);
-void printMeta(ResourceManager& re, uint64_t offset);
-void cpout(ResourceManager& re, string fileName, const string outputPath);
-bool hasExtention(const string& fileName);
-void cpin(ResourceManager& re, string& sourceName, string& fileName, size_t blockSize);
-void md(ResourceManager& re, string& directoryName);
-void cd(ResourceManager& re, string& directoryName);
-void cdDots(ResourceManager& re);
-void cdRoot(ResourceManager& re);
-void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite, Metadata* currentMeta);
-void rd(ResourceManager& re, string& dirName);
-bool checkNames(ifstream& container, uint64_t parent_offset, string dirName);
-uint64_t getMetadataOff(ResourceManager& re, ifstream& containerRead, Metadata& fileMeta);
 
 
 
@@ -796,12 +835,12 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}*/
 	string fileSystem = "container.bin";
-	string newDir = "Ehaa";
+	string newDir = "";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
 	string fileName = "meg2.txt";
 
 	ResourceManager resource(fileSystem);
-	string command = "cpin";
+	string command = "ls";
 	if (command == "md") {
 		md(resource, newDir);
 	}
@@ -833,16 +872,24 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-void InsertionSort(vector<uint64_t>& array) {
+void InsertionSort(vector<uint64_t>& array, bool descending) {
 	size_t len = array.size();
 	for (int i = 1; i < len; ++i) {
 		int key = array[i];
 		int j = i - 1;
-
-		while (j >= 0 && array[j] > key) {
-			array[j + 1] = array[j];
-			--j;
+		if (!descending) {
+			while (j >= 0 && array[j] > key) {
+				array[j + 1] = array[j];
+				--j;
+			}
 		}
+		else {
+			while (j >= 0 && array[j] < key) {
+				array[j + 1] = array[j];
+				--j;
+			}
+		}
+		
 		array[j + 1] = key;
 	}
 }
@@ -900,7 +947,7 @@ void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(fileName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t child_offset = currentDirectoryOffset;
+	uint64_t child_offset = re.getCurrentDirOffset();
 	uint64_t parent_offset;
 
 	if (!directories.empty() && hasExtention(directories.back())) {
@@ -1030,7 +1077,7 @@ void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
 	delete child;
 }
 
-uint64_t getMetadataOff(ResourceManager& re, ifstream& containerRead, Metadata& fileMeta) {
+uint64_t getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& containerRead, Metadata& fileMeta) {
 	uint64_t metaOff;
 	if (!re.getFreeMeta().empty()) {
 		metaOff = re.getFreeMeta().back();
@@ -1044,9 +1091,9 @@ uint64_t getMetadataOff(ResourceManager& re, ifstream& containerRead, Metadata& 
 
 	}
 	else {
-		containerRead.clear();
-		containerRead.seekg(0, ios::end);
-		metaOff = containerRead.tellg();
+		containerWrite.clear();
+		containerWrite.seekp(0, ios::end);
+		metaOff = containerWrite.tellp();
 		// Increment id for the next meta because we wont be using the deleted
 		re.incrementId();
 	}
@@ -1059,7 +1106,7 @@ void ls(ResourceManager& re, string path) {
 	Metadata* childMeta = nullptr;
 	vector<string> directories = split(path.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset = currentDirectoryOffset;
+	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (!directories.empty() && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			uint64_t offset;
@@ -1197,7 +1244,7 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(fileName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset = currentDirectoryOffset;
+	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (directories.size() > 1 && hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			uint64_t offset;
@@ -1252,7 +1299,7 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 		fileName = directories.back();
 	}
 	else if (directories.size() == 1 && hasExtention(directories.back())) {
-		parent_offset = getOffsetByParent(containerRead, currentDirectoryOffset, fileName);
+		parent_offset = getOffsetByParent(containerRead, re.getCurrentDirOffset(), fileName);
 		if (parent_offset == -1) {
 			cerr << "The file doesnt exist in that folder!\n";
 			return;
@@ -1336,7 +1383,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(fileName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset = currentDirectoryOffset;
+	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (directories.size() > 1 && hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			uint64_t offset;
@@ -1394,8 +1441,8 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		delete parentMeta;
 		delete childMeta;
 	}
-	else if(directories.size() == 1 && hasExtention(directories.back()) && checkNames(containerRead,currentDirectoryOffset, fileName)) {
-		parent_offset = currentDirectoryOffset; 
+	else if(directories.size() == 1 && hasExtention(directories.back()) && checkNames(containerRead,re.getCurrentDirOffset(), fileName)) {
+		parent_offset = re.getCurrentDirOffset(); 
 	}
 	else {
 		return;
@@ -1422,32 +1469,28 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	fileMeta.id = re.getNextId();
 
 	// first file metaoffset is 190 
-	uint64_t metaOff = getMetadataOff(re,containerRead, fileMeta);
+
+	uint64_t metaOff = getMetadataOff(re,containerWrite,containerRead,fileMeta);
 	
 	// SERIALIZE THE FILEMETA
 	fileMeta.offset = metaOff;
 	string key1 = fileMeta.makeKey();
 	re.getMetadataHashTable().insert(key1, fileMeta.offset);
-
+	containerWrite.clear();
+	containerWrite.seekp(metaOff, ios::beg);
+	fileMeta.serialize(containerWrite);
 	// ADD THE FILEMETA OFFSET TO THE PARENT and serialize - here we need to update susbequent
 
 	uint64_t oldsize = parent->getSerializedSize();
 	parent->children.push_back(fileMeta.offset);
-	parent->children.push_back(12);
 
+	updateInMemoryOffsets(re, oldsize, *parent, parent->getSerializedSize());
+	fileMeta.offset = re.getMetadataHashTable().get(key1);
 
-	uint64_t newSize = parent->getSerializedSize();
-	uint64_t metaOff2 = getMetadataOff(re, containerRead, fileMeta);
-
-	updateInMemoryOffsets(re, oldsize, *parent, newSize);
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
 	parent->serialize(containerWrite);
-	// serialize because of the offset we need it to be reserved
 
-	containerWrite.clear();
-	containerWrite.seekp(metaOff, ios::beg);
-	fileMeta.serialize(containerWrite);
 
 
 
@@ -1481,13 +1524,13 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	// copy file content in chunks
 	char buffer[4096];
 	size_t remainingSize = filesize;
+	uint64_t oldSize = fileMeta.getSerializedSize();
 	for(size_t i =0;i< allocatedBlocks.size();++i){
 
 		size_t chunk_size = std::min(blockSize, remainingSize);
 		src.read(buffer, chunk_size);
 		size_t bytesRead = src.gcount();
 
-		uint64_t oldSize = fileMeta.getSerializedSize();
 		Block block;
 		block.hashBl = block.hashBlock(buffer, bytesRead);
 		block.size = bytesRead;
@@ -1522,10 +1565,10 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	}
 
 	// Here we need to update all susbequent offsets, if the old size if 
+	updateInMemoryOffsets(re, oldsize, fileMeta, fileMeta.getSerializedSize());
 	containerWrite.clear();
 	containerWrite.seekp(metaOff, ios::beg);
 	fileMeta.serialize(containerWrite);
-	updateInMemoryOffsets(re,oldsize,fileMeta,fileMeta.getSerializedSize());
 	
 	// Right here we need to loop over every parent till we reach the root and update their sizes 
 	uint64_t offset = parent_offset;
@@ -1586,7 +1629,7 @@ void md(ResourceManager& re, string& directoryName) {
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(directoryName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset = currentDirectoryOffset;
+	uint64_t parent_offset = re.getCurrentDirOffset();
 	container.clear();
 	if (directories.size() > 1 && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
@@ -1633,8 +1676,8 @@ void md(ResourceManager& re, string& directoryName) {
 		parent_offset = offsets.back();
 		directoryName = directories.back();
 	}
-	else if (directories.size() == 1 && !hasExtention(directories.back()) && checkNames(container,currentDirectoryOffset, directoryName)) {
-		parent_offset = currentDirectoryOffset;
+	else if (directories.size() == 1 && !hasExtention(directories.back()) && checkNames(container,re.getCurrentDirOffset(), directoryName)) {
+		parent_offset = re.getCurrentDirOffset();
 	}
 	else {
 		return;
@@ -1656,7 +1699,7 @@ void md(ResourceManager& re, string& directoryName) {
 	newDirMeta->id = re.getNextId();
 
 	// Determine the offset for the new directory metadata
-	uint64_t newdirOffset = getMetadataOff(re, container, *newDirMeta);
+	uint64_t newdirOffset = getMetadataOff(re,containerWrite, container, *newDirMeta);
 	newDirMeta->offset = newdirOffset;
 
 	// Write new directory metadata with the new child
@@ -1695,7 +1738,7 @@ void cd(ResourceManager& re, string& directoryName) {
 				return;
 			}
 			if (directories.size() == 1) {
-				offset = getOffsetByParent(container, currentDirectoryOffset, dir);
+				offset = getOffsetByParent(container, re.getCurrentDirOffset(), dir);
 			}
 			else {
 				offset = getOffsetByParent(container, parentMeta->offset, dir);
@@ -1732,7 +1775,7 @@ void cd(ResourceManager& re, string& directoryName) {
 		directoryName = directories.back();
 	}
 	else if (directories.empty()) {
-		parent_offset = currentDirectoryOffset;
+		parent_offset = re.getCurrentDirOffset();
 	}
 	else {
 		return;
@@ -1747,7 +1790,7 @@ void cd(ResourceManager& re, string& directoryName) {
 		cerr << "Error: There is a corruptuion with the direcotries.\n";
 		return;
 	}
-	currentDirectoryOffset = parent_offset;
+	re.getCurrentDirOffset() = parent_offset;
 	
 	delete currentDirMeta;
 }
@@ -1755,7 +1798,7 @@ void cd(ResourceManager& re, string& directoryName) {
 void cdDots(ResourceManager& re) {
 	ifstream& container = re.getInputStream();
 	container.clear();
-	container.seekg(currentDirectoryOffset, ios::beg);
+	container.seekg(re.getCurrentDirOffset(), ios::beg);
 	Metadata* currentMeta = Metadata::deserialize(container);
 	if (!currentMeta->isDirectory || currentMeta->isDeleted) {
 		cerr << "Error: There is a corruptuion with the direcotries.\n";
@@ -1765,7 +1808,7 @@ void cdDots(ResourceManager& re) {
 		cout << "Already in home.\n";
 		return;
 	}
-	currentDirectoryOffset = currentMeta->parent;
+	re.getCurrentDirOffset() = currentMeta->parent;
 
 }
 
@@ -1802,7 +1845,7 @@ void rd(ResourceManager& re, string& dirName) {
 	// Here basically we are checking if the path specified exitsts 
 	vector<string> directories = split(dirName.c_str(), '\\');
 	vector<uint64_t> offsets;
-	uint64_t parent_offset = currentDirectoryOffset;
+	uint64_t parent_offset = re.getCurrentDirOffset();
 	// after all of this i need to get the acutal last dir
 	if (!directories.empty() && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
