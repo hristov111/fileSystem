@@ -1,10 +1,34 @@
 ﻿  FileName.cpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.41.34120\include\filesystem(12): warning STL4038: The contents of <filesystem> are available only with C++17 or later.
 C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(31,2): warning C4984: 'if constexpr' is a C++17 language extension
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(878,11): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(878,11): warning C4244:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(878,11): warning C4244:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(878,11): warning C4244:             _Ty=uint64_t
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(878,11): warning C4244:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1546,23): warning C4018: '>': signed/unsigned mismatch
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(199,3): warning C4984: 'if constexpr' is a C++17 language extension
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(199,3):
+      the template instantiation context (the oldest one first) is
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(192,7):
+          while compiling class template 'HashTable'
+  
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(203,8): warning C4984: 'if constexpr' is a C++17 language extension
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(927,11): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(927,11): warning C4244:         with
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(927,11): warning C4244:         [
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(927,11): warning C4244:             _Ty=uint64_t
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(927,11): warning C4244:         ]
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1604,23): warning C4018: '>': signed/unsigned mismatch
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(303,10): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(303,10):
+      the template instantiation context (the oldest one first) is
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(765,3):
+          see reference to class template instantiation 'HashTable<uint64_t,StructType>' being compiled
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(300,7):
+          while compiling class template member function 'void HashTable<uint64_t,StructType>::InsertionSort(std::vector<std::pair<Key,Value>,std::allocator<std::pair<Key,Value>>> &) const'
+          with
+          [
+              Key=uint64_t,
+              Value=StructType
+          ]
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(293,16):
+              see the first reference to 'HashTable<uint64_t,StructType>::InsertionSort' in 'HashTable<uint64_t,StructType>::getsortedByKey'
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(817,53):
+              see the first reference to 'HashTable<uint64_t,StructType>::getsortedByKey' in 'updateInMemoryOffsets'
+  
   FileSystem.vcxproj -> C:\Users\vboxuser\source\repos\FileSystem\x64\Debug\FileSystem.exe

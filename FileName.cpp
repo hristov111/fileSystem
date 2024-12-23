@@ -48,7 +48,6 @@ char* my_string(T value) {
 
 }
 
-#pragma pack(push, 1)
 struct Metadata {
 	char name[100]; // file or directory name
 	size_t id;
@@ -187,7 +186,6 @@ struct Metadata {
 
 
 };
-#pragma pack(pop)
 
 
 template<typename Key, typename Value> 
@@ -198,11 +196,24 @@ private:
 
 	// custom hash function
 	int hashFunction(const Key& key) const {
-		int hash = 0;
-		for (char c : key) {
-			hash = (hash * 31 + c) % TABLE_SIZE;
+		if constexpr (std::is_integral<Key>::value) {
+			// If key is an integer
+			return key % TABLE_SIZE;
 		}
-		return hash;
+		else if constexpr (std::is_convertible<Key, std::string>::value) {
+			// If key is convertible to a string (e.g., std::string)
+			int hash = 0;
+			std::string keyStr = static_cast<std::string>(key);
+			for (char c : keyStr) {
+				hash = (hash * 31 + c) % TABLE_SIZE;
+			}
+			return hash;
+		}
+		else {
+			// Fallback to std::hash for other types
+			std::hash<Key> keyHash;
+			return keyHash(key) % TABLE_SIZE;
+		}
 	}
 
 public:
@@ -267,6 +278,37 @@ public:
 			}
 		}
 		return false; // key not found
+	}
+
+	vector<pair<Key,Value>> getsortedByKey() const{
+		vector<pair<Key, Value>> allPairs;
+
+
+		// exract all key-value pairs
+		for (int i = 0; i < TABLE_SIZE; ++i) {
+			for (const auto& kv : table[i]) {
+				allPairs.emplace_back(kv);
+			}
+		}
+		InsertionSort(allPairs);
+
+		return allPairs;
+		// sort the vector by key (ascending order by default)
+		
+	}
+
+	void InsertionSort(vector<pair<Key, Value>>& vec) const {
+		for (size_t i = 1; i < vec.size(); i++) {
+			auto current = vec[i];
+			int j = i - 1;
+
+
+			while (j >= 0 && vec[j].first < current.first) {
+				vec[j + 1] = vec[j];
+				--j;
+			}
+			vec[j + 1] = current;
+		}
 	}
 
 	void iterate(function<void(const string&, uint64_t&)> func) {
@@ -349,6 +391,7 @@ private:
 	uint64_t vec2Offset = 0;
 	uint64_t hash1Offset = 0;
 	uint64_t hash2Offset = 0;
+	uint64_t nexOffsetForWriting = 0;
 
 	void serializeVector(vector<uint64_t>& vec, ofstream& out) {
 		if (!out) {
@@ -449,7 +492,6 @@ public:
 		inputStream.clear();
 		// in order to go to that offset we need to deserialize the root calculate the offset dynamically and then
 
-		
 
 		inputStream.seekg(0,ios::beg);
 
@@ -482,7 +524,7 @@ public:
 		}
 
 		currentDirectoryOffset = metadataHashtable.get("/");
-
+		nexOffsetForWriting = vec1Offset;
 
 	}
 
@@ -490,6 +532,9 @@ public:
 	ofstream& getOutputStream() { return outputStream; }
 
 	uint64_t& getCurrentDirOffset() { return currentDirectoryOffset; }
+	uint64_t& getNextOffsetForWriting() { return nexOffsetForWriting; }
+
+
 
 	size_t& getNextId() { return id; }
 	void incrementId() { id++; }
@@ -512,6 +557,8 @@ public:
 
 	~ResourceManager() {
 		// Serialize data when the program end
+
+
 		outputStream.clear();
 		outputStream.seekp(0, ios::end); // Move to the end of the file
 		//Write vector 1
@@ -539,6 +586,7 @@ public:
 		outputStream.write(reinterpret_cast<const char*>(&hash1Offset), sizeof(hash1Offset));
 
 		outputStream.write(reinterpret_cast<const char*>(&hash2Offset), sizeof(hash2Offset));
+
 		// Ensure the file streams are properly closed
 		if (inputStream.is_open()) inputStream.close();
 		if (outputStream.is_open()) outputStream.close();
@@ -548,7 +596,6 @@ public:
 
 };
 // this needs to be serialized and deserialzied
-
 struct Block {
 	uint64_t content_offset; // offset of the block content
 	uint64_t block_offset; // offset of the block metadata
@@ -610,10 +657,10 @@ struct Block {
 		size_t dynamicsize = sizeof(size_t) + hashBl.size();
 		return fiexedSize + dynamicsize;
 	}
-	void writeToContainer(std::ofstream& container, const char* buffer, size_t buffersize, uint64_t offset) {
+	void writeToContainer(std::ofstream& container, const char* buffer, size_t buffersize, uint64_t offset, int nFile=1 ) {
 		block_offset = offset;
 		size = buffersize;
-		numberOfFiles = 1;
+		numberOfFiles = nFile;
 		container.clear();
 		container.seekp(offset, ios::beg);
 
@@ -624,7 +671,7 @@ struct Block {
 		}
 
 		// write the block's data to thec ontainer
-		content_offset = offset + getSerializedSize();
+		content_offset = offset +getSerializedSize();
 		if (!container) {
 			throw runtime_error("Error: Failed to seek to block offset");
 		}
@@ -644,6 +691,9 @@ struct Block {
 		if (!container) {
 			throw runtime_error("Error: Failed to flush the container stream");
 		}
+		container.clear();
+		container.seekp(0, ios::end);
+		uint64_t m = container.tellp();
 
 	}
 	string hashBlock(const char* block, size_t size) {
@@ -657,6 +707,7 @@ struct Block {
 	
 
 };
+
 
 void InsertionSort(vector<uint64_t>& array, bool descending = false);
 std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
@@ -704,22 +755,21 @@ vector<string> split(const char* str, char delimeter) {
 
 }
 
-void getBlockOffsets(ResourceManager& re,Metadata& childMeta, vector<uint64_t>& for_upgrading, vector<StructType>& types, uint64_t base_offset, HashTable<string, uint64_t>& dp) {
+void getBlockOffsets(ResourceManager& re,Metadata& childMeta, HashTable<uint64_t, StructType>& for_upgrading, uint64_t base_offset, HashTable<string, uint64_t>& dp) {
 	for (auto& key : childMeta.keys) {
 		uint64_t off = re.getBlockHashTable().get(key);
 		if (base_offset > off || dp.exists(key)) {
 			continue;
 		}
 		dp.insert(key, off);
-		for_upgrading.push_back(off);
-		types.push_back(BLOCK);
+		for_upgrading.insert(off, BLOCK);
 
 	}
 }
 
 
 // the plan is this - we go through every dir and ile and put them in a vector of offsets
-void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<string, uint64_t>& dp, uint64_t base_offset, vector<uint64_t>& for_upgrading, vector<StructType>&types) {
+void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<string, uint64_t>& dp, uint64_t base_offset, HashTable<uint64_t, StructType>& for_upgrading, int64_t sizeDifference) {
 
 	string key = parent.makeKey();
 	// check if the value for this parent is already computed 
@@ -728,7 +778,7 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 	}
 	dp.insert(key, parent.offset);
 	if (!parent.children.size()) {
-		getBlockOffsets(re, parent, for_upgrading, types, base_offset, dp);
+		getBlockOffsets(re, parent, for_upgrading, base_offset, dp);
 
 	}
 
@@ -737,16 +787,16 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 		if (base_offset > child_offset) {
 			continue;
 		}
-		for_upgrading.push_back(child_offset);
-		types.push_back(METADATA);
+		for_upgrading.insert(child_offset,METADATA);
 		containerRead.clear();
 		containerRead.seekg(child_offset, ios::beg);
 		Metadata* childMeta = Metadata::deserialize(containerRead);
+		child_offset += sizeDifference;
 		if (childMeta->isDirectory) {
-			dfs(re,containerRead, *childMeta, dp, base_offset, for_upgrading,types);
+			dfs(re,containerRead, *childMeta, dp, base_offset, for_upgrading,sizeDifference);
 		}
 		else { // the file is not directory and we need to fix block offset and content offsets
-			getBlockOffsets(re, *childMeta, for_upgrading, types, base_offset, dp);
+			getBlockOffsets(re, *childMeta, for_upgrading, base_offset, dp);
 		}
 		delete childMeta;
 	}
@@ -760,18 +810,17 @@ void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& paren
 		// here we need to implement deph first seach
 		HashTable<string, uint64_t> dp;
 		// offsets that we need to loop deserialize change them and serialize again (first we need to sor them)
-		vector<uint64_t> offsets;
-		vector<StructType> types;
+		HashTable<uint64_t, StructType> hash_offsets;
 
 		// Update offsets in the hashtable
-		dfs(re,re.getInputStream(),parent,dp,parent.offset,offsets,types);
-		InsertionSort(offsets,true);
+		dfs(re,re.getInputStream(),parent,dp,parent.offset, hash_offsets,sizeDifference);
+		vector<pair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
 		ofstream& contasinerWrite = re.getOutputStream();
 		ifstream& containerRead = re.getInputStream();
 
-		for (int i = 0; i < offsets.size(); ++i) {
-			uint64_t curr_offset = offsets[i];
-			StructType curr_type = types[i];
+		for (int i = 0; i < sorted_offsets.size(); ++i) {
+			uint64_t curr_offset = sorted_offsets[i].first;
+			StructType curr_type = sorted_offsets[i].second;
 
 			if (curr_type == METADATA) {
 				containerRead.clear();
@@ -792,7 +841,7 @@ void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& paren
 				containerRead.clear();
 				containerRead.seekg(block->content_offset, ios::beg);
 				containerRead.read(buffer, block->size);
-				block->writeToContainer(contasinerWrite,buffer,block->size,block->block_offset);
+				block->writeToContainer(contasinerWrite,buffer,block->size,block->block_offset, block->numberOfFiles);
 			}
 		}
 
@@ -835,12 +884,12 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}*/
 	string fileSystem = "container.bin";
-	string newDir = "";
+	string newDir = "Ehaa3\\Ahaa";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	string fileName = "meg2.txt";
+	string fileName = "baba.txt";
 
 	ResourceManager resource(fileSystem);
-	string command = "ls";
+	string command = "cpin";
 	if (command == "md") {
 		md(resource, newDir);
 	}
@@ -1091,9 +1140,15 @@ uint64_t getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& 
 
 	}
 	else {
-		containerWrite.clear();
-		containerWrite.seekp(0, ios::end);
-		metaOff = containerWrite.tellp();
+		if (re.getNextOffsetForWriting() == 0) {
+			containerWrite.clear();
+			containerWrite.seekp(0, ios::end);
+			metaOff = containerWrite.tellp();
+		}
+		else {
+			metaOff = re.getNextOffsetForWriting();
+
+		}
 		// Increment id for the next meta because we wont be using the deleted
 		re.incrementId();
 	}
@@ -1493,11 +1548,14 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 
 
 
-
 	// Get the file size 
 	src.seekg(0, ios::end);
 	size_t filesize = src.tellg();
 	src.seekg(0, ios::beg);
+
+	containerRead.clear();
+	containerRead.seekg(fileMeta.offset, ios::beg);
+	Metadata* de4 = Metadata::deserialize(containerRead);
 	
 	// --------------------------- CALCULATION OF THE REQUIRED BLOCKS
 	// Calculate the required number of blocks
@@ -1567,8 +1625,9 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	// Here we need to update all susbequent offsets, if the old size if 
 	updateInMemoryOffsets(re, oldsize, fileMeta, fileMeta.getSerializedSize());
 	containerWrite.clear();
-	containerWrite.seekp(metaOff, ios::beg);
+	containerWrite.seekp(fileMeta.offset, ios::beg);
 	fileMeta.serialize(containerWrite);
+
 	
 	// Right here we need to loop over every parent till we reach the root and update their sizes 
 	uint64_t offset = parent_offset;
@@ -1687,7 +1746,7 @@ void md(ResourceManager& re, string& directoryName) {
 	containerWrite.flush();
 
 	container.seekg(parent_offset, ios::beg);
-	Metadata* currentMeta = Metadata::deserialize(container);
+	parentMeta = Metadata::deserialize(container);
 
 	// Create new directory metadata
 	Metadata* newDirMeta = new Metadata();
@@ -1699,22 +1758,29 @@ void md(ResourceManager& re, string& directoryName) {
 	newDirMeta->id = re.getNextId();
 
 	// Determine the offset for the new directory metadata
-	uint64_t newdirOffset = getMetadataOff(re,containerWrite, container, *newDirMeta);
-	newDirMeta->offset = newdirOffset;
+	uint64_t metaOff = getMetadataOff(re, containerWrite, container, *newDirMeta);
 
-	// Write new directory metadata with the new child
-	containerWrite.seekp(newdirOffset, ios::beg);
+	// SERIALIZE THE FILEMETA
+	newDirMeta->offset = metaOff;
+	string key1 = newDirMeta->makeKey();
+	re.getMetadataHashTable().insert(key1, newDirMeta->offset);
+	containerWrite.clear();
+	containerWrite.seekp(metaOff, ios::beg);
 	newDirMeta->serialize(containerWrite);
-	re.getMetadataHashTable().insert(newDirMeta->makeKey(), newdirOffset);
+	// ADD THE FILEMETA OFFSET TO THE PARENT and serialize - here we need to update susbequent
 
+	uint64_t oldsize = parentMeta->getSerializedSize();
+	parentMeta->children.push_back(newDirMeta->offset);
 
-	// Update current direcotry metadata wioth the new child
-	currentMeta->children.push_back(newdirOffset);
+	updateInMemoryOffsets(re, oldsize, *parentMeta, parentMeta->getSerializedSize());
+	newDirMeta->offset = re.getMetadataHashTable().get(key1);
+
+	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
-	currentMeta->serialize(containerWrite);
+	parentMeta->serialize(containerWrite);
 
 	cout << "Directory " << directoryName << " created successfully\n";
-	printMeta(re, newdirOffset);
+	printMeta(re, newDirMeta->offset);
 }
 
 // 2 options - cd Home\user\soemwhere or cd Home
