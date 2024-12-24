@@ -1,5 +1,4 @@
 #include <iostream>
-#include <list>
 #include <cstring>
 #include <filesystem>
 #include <vector>
@@ -329,6 +328,20 @@ public:
 		}
 	}
 
+	size_t getSerializedSize() {
+		size_t totalsize = sizeof(size_t); 
+		for (int i = 0; i < TABLE_SIZE; ++i) {
+			for (const auto& kv : table[i]) {
+				totalsize += sizeof(size_t);                // For keyLength
+				totalsize += kv.first.size();              // For key data
+				totalsize += sizeof(kv.second);            // For value data
+			}
+		}
+
+		return totalsize;
+
+	}
+
 	void deserialize(ifstream& in) {
 		if (!in) {
 			throw runtime_error("Error: Input stream is not valid");
@@ -361,10 +374,11 @@ public:
 
 	}
 };
+
+void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& parent, uint64_t newSize);
 class ResourceManager {
 private:
 	string currentOperation;
-	uint64_t currentDirectoryOffset = 0;
 	ifstream inputStream;
 	ofstream outputStream;
 	vector<uint64_t> freeBlocks;
@@ -372,13 +386,19 @@ private:
 	HashTable<string, uint64_t> blockHashTable;
 	HashTable<string, uint64_t> metadataHashtable;
 	string fileName;
+	uint64_t currentDirectoryOffset = 0;
+
 	// this is for the fileMeta idenitfier if it has 
+	uint64_t root_offset = 0;
 	size_t id = 0;
-	uint64_t vec1Offset = 0;
-	uint64_t vec2Offset = 0;
-	uint64_t hash1Offset = 0;
-	uint64_t hash2Offset = 0;
-	uint64_t nexOffsetForWriting = 0;
+	uint64_t vec1Offset = 8;
+	uint64_t vec2Offset = 1032;
+	uint64_t hash1Offset = 2056;
+	uint64_t hash2Offset = 3080;
+	size_t vec1AllocatedSize = 1024; // Initially allocated size
+	size_t vec2AllocatedSize = 1024;
+	size_t hash1AllocatedSize = 1024;
+	size_t hash2AllocatedSize = 1024;
 
 	void serializeVector(vector<uint64_t>& vec, ofstream& out) {
 		if (!out) {
@@ -409,6 +429,13 @@ private:
 		}
 		return vec;
 	}
+
+	size_t getSerializedSize(vector<uint64_t>& vec) {
+		size_t totalSize = sizeof(size_t);
+		totalSize += vec.size() * sizeof(uint64_t); // each element's size
+		return totalSize;
+	}
+
 	bool InitializeContainer() {
 		
 		ifstream filecheck(fileName, ios::binary | ios::in);
@@ -432,13 +459,6 @@ private:
 			throw runtime_error("Error: Cannot create container file");
 		}
 		// we first write the offsets for the vectors and hashtables because they wont change in size
-		container.clear();
-		container.seekp(0, ios::beg);
-		size_t placeholder = 0; // reserved for the hashtables and vectors offsets
-		for (size_t i = 0; i < 6; ++i) {
-			container.write(reinterpret_cast<const char*>(&placeholder), sizeof(placeholder));
-		}
-
 		// Create the root directory metadata
 		Metadata rootDir;
 		strncpy_s(rootDir.name, "/", sizeof(rootDir.name));
@@ -450,19 +470,17 @@ private:
 		incrementId();
 
 		container.clear();
-		container.seekp(0, ios::end);
+		container.seekp(hash2Offset + hash2AllocatedSize, ios::beg);
 		rootDir.offset = container.tellp();
 		container.clear();
 		container.seekp(rootDir.offset, ios::beg);
 		rootDir.serialize(container);
+		root_offset = rootDir.offset;
 		// Write the root directory metadata to the container
 		metadataHashtable.insert("/", rootDir.offset);
 		currentDirectoryOffset = rootDir.offset;
 		// set the next point for wrting
 		container.clear();
-		nexOffsetForWriting = container.tellp();
-
-
 		cout << "Container initialized with root directory.\n";
 
 		inputStream.open(fileName, ios::binary | ios::in);
@@ -480,51 +498,37 @@ public:
 			return;
 		}
 		inputStream.clear();
+		inputStream.seekg(0, ios::beg);
+		inputStream.read(reinterpret_cast<char*>(&id), sizeof(id));
+
 		// in order to go to that offset we need to deserialize the root calculate the offset dynamically and then
 
 
-		inputStream.seekg(0,ios::beg);
+		inputStream.clear();
 
-		inputStream.read(reinterpret_cast<char*>(&nexOffsetForWriting), sizeof(nexOffsetForWriting));
+		inputStream.seekg(vec1Offset,ios::beg);
+		freeBlocks = deserializeVector(inputStream);
+		inputStream.seekg(vec2Offset, ios::beg);
 
-		inputStream.read(reinterpret_cast<char*>(&id), sizeof(id));
+		inputStream.clear();
+		freeMeta = deserializeVector(inputStream);
+		inputStream.seekg(hash1Offset, ios::beg);
 
-		inputStream.read(reinterpret_cast<char*>(&vec1Offset), sizeof(vec1Offset));
-		inputStream.read(reinterpret_cast<char*>(&vec2Offset), sizeof(vec2Offset));
+		inputStream.clear();
+		blockHashTable.deserialize(inputStream);
+		inputStream.seekg(hash2Offset, ios::beg);
 
-		inputStream.read(reinterpret_cast<char*>(&hash1Offset), sizeof(hash1Offset));
-
-		inputStream.read(reinterpret_cast<char*>(&hash2Offset), sizeof(hash2Offset));
-
-		if (vec1Offset != 0) {
-			inputStream.seekg(vec1Offset, ios::beg);
-			freeBlocks = deserializeVector(inputStream);
-		}
-		if (vec2Offset != 0) {
-			inputStream.seekg(vec2Offset, ios::beg);
-			freeMeta = deserializeVector(inputStream);
-		}
-
-		if (hash1Offset != 0) {
-			inputStream.seekg(hash1Offset, ios::beg);
-			blockHashTable.deserialize(inputStream);
-		}
-
-		if (hash2Offset != 0) {
-			inputStream.seekg(hash2Offset, ios::beg);
-			metadataHashtable.deserialize(inputStream);
-		}
+		inputStream.clear();
+		metadataHashtable.deserialize(inputStream);
 
 		currentDirectoryOffset = metadataHashtable.get("/");
+
 	}
 
 	ifstream& getInputStream() { return inputStream; }
 	ofstream& getOutputStream() { return outputStream; }
 
 	uint64_t& getCurrentDirOffset() { return currentDirectoryOffset; }
-
-	uint64_t& getNextOffsetForWriting() { return nexOffsetForWriting; }
-	void setNextOffsetForWriting(uint64_t val) { nexOffsetForWriting = val; }
 
 
 	size_t& getNextId() { return id; }
@@ -549,42 +553,117 @@ public:
 	// if its cpin - we need the last offset like the last time
 	~ResourceManager() {
 		// Serialize data when the program end
-
-		uint64_t key = (metadataHashtable.getsortedByKey(false))[0].second;
-		nexOffsetForWriting = key;
 		outputStream.clear();
+		outputStream.seekp(0, ios::beg);
+		outputStream.write(reinterpret_cast<const char*>(&id), sizeof(id));
+
+		// here i need to allocate new space to the vector and hashtables if their limit arise 
+		// we need to get all the current sizes of vectors and hashtables 
+		size_t vec1CurrSize = getSerializedSize(freeBlocks);
+		size_t vec2CurrSize = getSerializedSize(freeMeta);
+
+		size_t hashtable1 = blockHashTable.getSerializedSize();
+		size_t hashtable2 = metadataHashtable.getSerializedSize();
+
+		if (vec1CurrSize > vec2AllocatedSize || vec2CurrSize > vec2AllocatedSize || hashtable1 > hash1AllocatedSize || hashtable2 > hash2AllocatedSize) {
+			// here we need to call a function that firstly - updates the sizes of the in memory, this means that we need to get all from the root directory to the last offset for upgrading 
+			// then we need to get all the vecs and hashtables that are after the upgrading one and update it them too - so basically we will double the size - this mean 1024
+			// so firstly we call the function updateInMemoryOffsets
+			inputStream.clear();
+			inputStream.seekg(root_offset, ios::beg);
+			Metadata* root = Metadata::deserialize(inputStream);
+			uint64_t oldSize = 1024;
+			uint64_t newSize = 2056;
+			updateInMemoryOffsets(this, oldSize,*root, newSize);
+			// offset now are update but the still is not updated, so ... 
+			root->offset += 1024;
+			string key = root->makeKey();
+			metadataHashtable.insert(key, root->offset);
+			outputStream.clear();
+			outputStream.seekp(root->offset, ios::beg);
+			root->serialize(outputStream);
+
+			// Now after we serialize the root we need to fix the vec and hashtableso
+			vector<uint64_t> offsets_for_upgrading;
+			uint64_t offset;
+			// we need to get firstly the overlapping struct
+			if (vec1CurrSize > vec1AllocatedSize) {
+				hash2Offset += 1024;
+				outputStream.clear();
+				outputStream.seekp(hash2Offset, ios::beg);
+				metadataHashtable.serialize(outputStream);
+				
+				hash1Offset += 1024;
+				outputStream.clear();
+				outputStream.seekp(hash1Offset, ios::beg);
+				blockHashTable.serialize(outputStream);
+
+				vec2Offset+= 1024;
+				outputStream.clear();
+				outputStream.seekp(vec2Offset, ios::beg);
+				serializeVector(freeMeta, outputStream);
+				vec1AllocatedSize += 1024;
+			}
+
+			else if (vec2CurrSize > vec2AllocatedSize) {
+				hash2Offset += 1024;
+				outputStream.clear();
+				outputStream.seekp(hash2Offset, ios::beg);
+				metadataHashtable.serialize(outputStream);
+				
+				hash1Offset += 1024;
+				outputStream.clear();
+				outputStream.seekp(hash1Offset, ios::beg);
+				blockHashTable.serialize(outputStream);
+
+				vec2AllocatedSize += 1024;
+			}
+			else if (hashtable1 > hash1AllocatedSize) {
+				hash2Offset += 1024;
+				outputStream.clear();
+				outputStream.seekp(hash2Offset, ios::beg);
+				metadataHashtable.serialize(outputStream);
+
+				hash1AllocatedSize += 1024;
+			}
+			else if (hashtable2 > hash2AllocatedSize) {
+				// update only the size of the hash2AllocatedSize
+				hash2AllocatedSize += 1024;
+			}
+
+			
+
+
+
+
+		}
+
+
 
 		// Move to the end of the file
 		//Write vector 1
-		outputStream.seekp(key, ios::beg);
-		vec1Offset = outputStream.tellp();
+		outputStream.clear();
+
+		outputStream.seekp(vec1Offset, ios::beg);
 		serializeVector(freeBlocks, outputStream);
 
 		// Write vector 2
-		vec2Offset = outputStream.tellp();
+		outputStream.clear();
+
+		outputStream.seekp(vec2Offset, ios::beg);
 		serializeVector(freeMeta, outputStream);
 
 		// Write HaSh table 1
-		hash1Offset = outputStream.tellp();
+		outputStream.clear();
+
+		outputStream.seekp(hash1Offset, ios::beg);
 		blockHashTable.serialize(outputStream);
 
 		// Write hash table 2
-		hash2Offset = outputStream.tellp();
+		outputStream.clear();
+
+		outputStream.seekp(hash2Offset, ios::beg);
 		metadataHashtable.serialize(outputStream);
-
-		outputStream.seekp(0, ios::beg);
-		outputStream.write(reinterpret_cast<const char*>(&nexOffsetForWriting), sizeof(nexOffsetForWriting));
-
-		outputStream.write(reinterpret_cast<const char*>(&id), sizeof(id));
-
-		outputStream.write(reinterpret_cast<const char*>(&vec1Offset), sizeof(vec1Offset));
-		outputStream.write(reinterpret_cast<const char*>(&vec2Offset), sizeof(vec2Offset));
-
-		outputStream.write(reinterpret_cast<const char*>(&hash1Offset), sizeof(hash1Offset));
-
-		outputStream.write(reinterpret_cast<const char*>(&hash2Offset), sizeof(hash2Offset));
-
-		outputStream.flush();
 
 		// Ensure the file streams are properly closed
 		if (inputStream.is_open()) inputStream.close();
@@ -790,7 +869,7 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 		delete childMeta;
 	}
 }
-void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& parent , uint64_t newSize) {
+void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& parent , uint64_t newSize) {
 
 	// if the size has changed, update subsequent offsets in the hashtable
 	if (newSize != oldSize) {
@@ -807,11 +886,11 @@ void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& paren
 		Metadata* as = Metadata::deserialize(containerRead1);*/
 
 		// Update offsets in the hashtable
-		dfs(re,re.getInputStream(),parent,dp,parent.offset, hash_offsets,sizeDifference);
+		dfs(*re,re->getInputStream(),parent,dp,parent.offset, hash_offsets,sizeDifference);
 		vector<pair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
 
-		ofstream& contasinerWrite = re.getOutputStream();
-		ifstream& containerRead = re.getInputStream();
+		ofstream& contasinerWrite = re->getOutputStream();
+		ifstream& containerRead = re->getInputStream();
 
 		for (int i = 0; i < sorted_offsets.size(); ++i) {
 			uint64_t curr_offset = sorted_offsets[i].first;
@@ -840,25 +919,25 @@ void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& paren
 			}
 		}
 
-		auto& metaHaSh = re.getMetadataHashTable();
+		auto& metaHaSh = re->getMetadataHashTable();
 		metaHaSh.iterate([&](const string& key, uint64_t& of) {
 			if (parent.offset < of) {
 				of += sizeDifference; // Shift subsequent offsets
 			}
 		});
 
-		auto& hashtable = re.getBlockHashTable();
+		auto& hashtable = re->getBlockHashTable();
 		hashtable.iterate([&](const string& key, uint64_t& of) {
 			if (parent.offset < of) {
 				of += sizeDifference; // Shift subsequent offsets
 			}
 			});
-		for (auto& off : re.getFreeblocks()) {
+		for (auto& off : re->getFreeblocks()) {
 			if (off > parent.offset) {
 				off += sizeDifference;
 			}
 		}
-		for (auto& off : re.getFreeMeta()) {
+		for (auto& off : re->getFreeMeta()) {
 			if (off > parent.offset) {
 				off += sizeDifference;
 			}
@@ -867,6 +946,7 @@ void updateInMemoryOffsets(ResourceManager& re, size_t& oldSize, Metadata& paren
 	}
 
 }
+
 
 
 
@@ -882,7 +962,7 @@ int main(int argc, char* argv[]) {
 
 	string newDir = "Ehee";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	string fileName = "bab4.txt";
+	string fileName = "bab21.txt";
 
 	string command = "cpin";
 	if (command == "md") {
@@ -1152,7 +1232,10 @@ uint64_t getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& 
 
 	}
 	else {
-		metaOff =re.getNextOffsetForWriting();
+
+		containerWrite.clear();
+		containerWrite.seekp(0, ios::end);
+		metaOff = containerWrite.tellp();
 		// Increment id for the next meta because we wont be using the deleted
 		re.incrementId();
 	}
@@ -1548,7 +1631,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	uint64_t oldsize = parent->getSerializedSize();
 	parent->children.push_back(fileMeta.offset);
 
-	updateInMemoryOffsets(re, oldsize, *parent, parent->getSerializedSize());
+	updateInMemoryOffsets(&re, oldsize, *parent, parent->getSerializedSize());
 	fileMeta.offset = re.getMetadataHashTable().get(key1);
 
 	containerWrite.clear();
@@ -1632,7 +1715,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	}
 
 	// Here we need to update all susbequent offsets, if the old size if 
-	updateInMemoryOffsets(re, oldsize, fileMeta, fileMeta.getSerializedSize());
+	updateInMemoryOffsets(&re, oldsize, fileMeta, fileMeta.getSerializedSize());
 	containerWrite.clear();
 	containerWrite.seekp(fileMeta.offset, ios::beg);
 	fileMeta.serialize(containerWrite);
@@ -1781,7 +1864,7 @@ void md(ResourceManager& re, string& directoryName) {
 	uint64_t oldsize = parentMeta->getSerializedSize();
 	parentMeta->children.push_back(newDirMeta->offset);
 
-	updateInMemoryOffsets(re, oldsize, *parentMeta, parentMeta->getSerializedSize());
+	updateInMemoryOffsets(&re, oldsize, *parentMeta, parentMeta->getSerializedSize());
 	newDirMeta->offset = re.getMetadataHashTable().get(key1);
 
 	containerWrite.clear();
