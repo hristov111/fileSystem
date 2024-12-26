@@ -1,19 +1,247 @@
 #include <iostream>
 #include <cstring>
 #include <filesystem>
-#include <vector>
 #include <fstream>
 #include <list>
 #include <string>
 #include <functional> 
 #include <type_traits>
-
-// root- 0 , offset - id , offset - vector, offset-vector2, offset- hash1, offset- hash2 ------------content---------, vector1-serialize, vector2-serialize, hash1-serialize, hash2-serialize
-// data structure that are holding in memory offsets are - hashtables, vectors, offsets of the actual vectors and hashtables
-
-// we need to update the actual offsets of the four data structures and the offsets in the data structures and thats it
-
+#include <iterator> // For std::iterator
 using namespace std;
+
+template<typename T>
+class DynamicArray {
+private:
+	T* data;
+	int capacity;
+	int size;
+
+public:
+	DynamicArray(size_t inititalCapacity=10) : capacity(inititalCapacity), size(0) {
+		data = new T[capacity];
+		for (size_t i = size; i < capacity; ++i) {
+			data[i] = T();
+
+		}
+	}
+
+	~DynamicArray() {
+		delete[] data;
+	}
+
+	T* get_data() {
+		return this->data;
+	}
+
+	const T* get_data() const {
+		return this->data;
+	}
+	void resize(int newCapacity) {
+		if (newCapacity > capacity) {
+			T* newData = new T[newCapacity];
+
+			for (size_t i = 0; i < size; ++i) {
+				newData[i] = std::move(data[i]);
+			}
+
+			// Zero - initialize the res of the buffer
+			for (size_t i = size; i < newCapacity; ++i) {
+				newData[i] = T();
+
+			}
+			delete[] data;
+			data = newData;
+			capacity = newCapacity;
+		}
+	}
+
+	void push_back(T &value) {
+		if (size == capacity) {
+			resize(capacity * 2);
+		}
+		data[size++] = value;
+	}
+
+	void push_back(T&& value) {
+		if (size == capacity) {
+			resize(capacity * 2);
+		}
+		data[size++] = move(value);
+	}
+
+	T& back() {
+		if (size == 0) {
+			throw out_of_range("Cannot access back of an empty array!\n");
+		}
+		return data[size-1];
+	}
+
+	bool empty() {
+		return size == 0;
+	}
+
+	void clear() {
+		for (int i = 0; i < size; ++i) {
+			data[i].~T(); // Call destructor for non-trivial types
+		}
+		size = 0;
+		delete[] data;
+		capacity = 4;
+		data = new T[capacity];
+	}
+
+	void pop_back() {
+		if (size == 0) {
+			throw std::out_of_range("Cannot pop_back from an empty array");
+		}
+
+		// Call the destructior for the last element if it;s a not trivial
+		data[size - 1].~T();
+
+		--size;
+	}
+
+	
+	
+
+	template<typename... Args>
+	void emplace_back(Args&&... args) {
+		if (size == capacity) {
+			resize(capacity * 2);
+		}
+		// use placement new to construct the object in place
+		new (&data[size++]) T(forward<Args>(args)...);
+	}
+
+	int get(int index) const {
+		if (index < 0 || index >= size) {
+			throw out_of_range("Index out of bounds");
+		}
+		return data[index];
+	}
+
+	T& operator[](size_t index) {
+		if (index >= capacity) {
+			resize(index + 1); // resize capacity
+		}
+		if (index >= size) {
+			size = index + 1; // adjust size
+		}
+		return data[index];
+	}
+
+	const T& operator[](size_t index) const {
+		if (index >= capacity) {
+			resize(index + 1); // resize capacity
+		}
+		if (index >= size) {
+			size = index + 1; // adjust size
+		}
+		return data[index];
+	}
+
+	int getSize() const { return size; }
+
+	// Iterator support
+	class iterator {
+	private:
+		T* ptr;
+
+	public:
+		using iterator_category = std::random_access_iterator_tag;
+		using value_type = T;
+		using difference_type = ptrdiff_t;
+		using pointer = T*;
+		using reference = T&;
+
+		explicit  iterator(T* p) : ptr(p) {}
+
+		iterator& operator++() {
+			++ptr;
+			return *this;
+		}
+		iterator operator++(int) {
+			iterator temp = *this;
+			++(*this);
+			return temp;
+		}
+
+		iterator& operator--() {
+			--ptr;
+			return *this;
+		}
+		iterator operator--(int) {
+			iterator temp = *this;
+			--(*this);
+			return temp;
+		}
+
+		T& operator*() const { return *ptr; }
+		T* operator->() const { return ptr; }
+
+		bool operator==(const iterator& other) const { return ptr == other.ptr; }
+		bool operator!=(const iterator& other) const { return ptr != other.ptr; }
+
+		bool operator<(const iterator& other) const { return ptr < other.ptr; }
+
+		bool operator>(const iterator& other) const { return ptr > other.ptr; }
+
+		bool operator<=(const iterator& other) const { return ptr <=other.ptr; }
+		bool operator>=(const iterator& other) const { return ptr >= other.ptr; }
+
+		iterator operator+(difference_type n) const { return iterator(ptr + n); }
+		iterator operator-(difference_type n) const { return iterator(ptr - n); }
+
+
+		difference_type operator-(const iterator& other) const { return ptr - other.ptr; }
+	};
+	iterator begin() const { return iterator(data); }
+	iterator end() const { return iterator(data + size); }
+
+
+	iterator erase(iterator first, iterator last) {
+		if (first < begin() || last > end() || first >= last) {
+			throw out_of_range("Invalid range for erase");
+		}
+
+		// Calculate the range size
+		size_t rangeSize = last - first;
+
+		// Move elements after the range
+		for (auto it = first; it + rangeSize < end(); ++it) {
+			*it = move(*(it + rangeSize));
+		}
+
+
+		// Reduce the size of the array
+		size -= rangeSize;
+
+		return first;
+
+	}
+
+	// assign with iterators 
+	template <typename InputIterator>
+	void assign(InputIterator first, InputIterator last) {
+		size_t newSize = distance(first, last);
+		if (newSize > capacity) {
+			resize(newSize);
+		}
+		size = newSize;
+		size_t index = 0;
+		for (auto it = first; it != last; ++it) {
+			data[index++] = *it;
+		}
+	}
+
+
+};
+
+
+
+
+class ResourceManager;
+
 
 enum StructType {METADATA , BLOCK};
 
@@ -50,17 +278,19 @@ char* my_string(T value) {
 struct Metadata {
 	char name[100]; // file or directory name
 	size_t id;
+	size_t max_capacity = 0; // if the metadata is for directory (this is donna help when we are making rewrites of the container)
 	bool isDirectory; // True if it's a directory
 	uint64_t offset; // offset in the container
 	uint64_t size; // size of the file (0 for directories)
-	vector<string> keys; // keys to the hashtable for the blocks
-	vector<uint64_t> children; // offsets of child files or directories 
+	DynamicArray<string> keys; // keys to the hashtable for the blocks
+	DynamicArray<uint64_t> children; // offsets of child files or directories 
 	uint64_t parent; // Parent directory's index in the metadata (0 for root)
 	bool isDeleted;
 	void serialize(std::ofstream& out) {
 
 		out.clear();
 		out.write(name, sizeof(name));
+		out.write(reinterpret_cast<const char*>(&max_capacity), sizeof(max_capacity));
 		out.write(reinterpret_cast<const char*>(&id), sizeof(id));
 		out.write(reinterpret_cast<const char*>(&isDirectory), sizeof(isDirectory));
 		out.write(reinterpret_cast<const char*>(&offset), sizeof(offset));
@@ -70,7 +300,7 @@ struct Metadata {
 
 
 		// Write= the size of the vector
-		size_t blockKeyCount = keys.size();
+		size_t blockKeyCount = keys.getSize();
 		out.write(reinterpret_cast<const char*>(&blockKeyCount), sizeof(blockKeyCount));
 
 		// Write each string in the vectopr
@@ -79,7 +309,7 @@ struct Metadata {
 			out.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
 			out.write(key.data(), keyLength);
 		}
-		size_t children_count = children.size();
+		size_t children_count = children.getSize();
 		out.write(reinterpret_cast<const char*>(&children_count), sizeof(children_count));
 
 		for (const auto& child : children) {
@@ -95,6 +325,7 @@ struct Metadata {
 		in.clear();
 		// Read fixed size fields
 		in.read(metadata->name, sizeof(metadata->name));
+		in.read(reinterpret_cast<char*>(&metadata->max_capacity), sizeof(metadata->max_capacity));
 		in.read(reinterpret_cast<char*>(&metadata->id), sizeof(metadata->id));
 		in.read(reinterpret_cast<char*>(&metadata->isDirectory), sizeof(metadata->isDirectory));
 		in.read(reinterpret_cast<char*>(&metadata->offset), sizeof(metadata->offset));
@@ -142,7 +373,7 @@ struct Metadata {
 
 	uint64_t getSerializedSize() const {
 		uint64_t fixedSize = sizeof(name) + sizeof(id) + sizeof(isDirectory)
-			+ sizeof(isDeleted) + sizeof(size) + sizeof(parent) + sizeof(offset);
+			+ sizeof(isDeleted) + sizeof(size) + sizeof(parent) + sizeof(offset) + sizeof(max_capacity);
 
 		// dynamic size member keys (vector<string>)
 		uint64_t keysSize = sizeof(size_t);
@@ -153,7 +384,7 @@ struct Metadata {
 
 		// Dynamic-size member: children
 		uint64_t childrensize = sizeof(size_t); // sizeof vector length
-		childrensize += children.size() * sizeof(uint64_t); // conent of vector
+		childrensize += children.getSize() * sizeof(uint64_t); // conent of vector
 
 		// total size 
 		return fixedSize + keysSize + childrensize;
@@ -258,8 +489,8 @@ public:
 		return false; // key not found
 	}
 
-	vector<pair<Key,Value>> getsortedByKey(bool key=true) const{
-		vector<pair<Key, Value>> allPairs;
+	DynamicArray<pair<Key,Value>> getsortedByKey(bool key=true) const{
+		DynamicArray<pair<Key, Value>> allPairs;
 
 
 		// exract all key-value pairs
@@ -275,8 +506,8 @@ public:
 		
 	}
 
-	void InsertionSort(vector<pair<Key, Value>>& vec, bool key=true) const {
-		for (size_t i = 1; i < vec.size(); i++) {
+	void InsertionSort(DynamicArray<pair<Key, Value>>& vec, bool key=true) const {
+		for (size_t i = 1; i < vec.getSize(); i++) {
 			auto current = vec[i];
 			int j = i - 1;
 			if (key) {
@@ -381,8 +612,8 @@ private:
 	string currentOperation;
 	ifstream inputStream;
 	ofstream outputStream;
-	vector<uint64_t> freeBlocks;
-	vector<uint64_t> freeMeta;
+	DynamicArray<uint64_t> freeBlocks;
+	DynamicArray<uint64_t> freeMeta;
 	HashTable<string, uint64_t> blockHashTable;
 	HashTable<string, uint64_t> metadataHashtable;
 	string fileName;
@@ -400,13 +631,13 @@ private:
 	size_t hash1AllocatedSize = 1024;
 	size_t hash2AllocatedSize = 1024;
 
-	void serializeVector(vector<uint64_t>& vec, ofstream& out) {
+	void serializeVector(DynamicArray<uint64_t>& vec, ofstream& out) {
 		if (!out) {
 			throw runtime_error("Error: Output stream is not valid");
 		}
 
 		// Write the size of the vector
-		size_t size = vec.size();
+		size_t size = vec.getSize();
 		out.write(reinterpret_cast<const char*>(&size), sizeof(size));
 
 		// Write the elements of the vector
@@ -415,7 +646,7 @@ private:
 		}
 	}
 
-	vector<uint64_t> deserializeVector(ifstream& in) {
+	DynamicArray<uint64_t> deserializeVector(ifstream& in) {
 		if (!in) {
 			throw runtime_error("Error: Input stream is not valid");
 		}
@@ -423,16 +654,16 @@ private:
 		size_t size;
 		in.read(reinterpret_cast<char*>(&size), sizeof(size));
 
-		vector<uint64_t> vec(size);
+		DynamicArray<uint64_t> vec(size);
 		for (size_t i = 0; i < size; ++i) {
 			in.read(reinterpret_cast<char*>(&vec[i]), sizeof(vec[i]));
 		}
 		return vec;
 	}
 
-	size_t getSerializedSize(vector<uint64_t>& vec) {
+	size_t getSerializedSize(DynamicArray<uint64_t>& vec) {
 		size_t totalSize = sizeof(size_t);
-		totalSize += vec.size() * sizeof(uint64_t); // each element's size
+		totalSize += vec.getSize() * sizeof(uint64_t); // each element's size
 		return totalSize;
 	}
 
@@ -481,7 +712,7 @@ private:
 		currentDirectoryOffset = rootDir.offset;
 		// set the next point for wrting
 		container.clear();
-		cout << "Container initialized with root directory.\n";
+		std::cout << "Container initialized with root directory.\n";
 
 		inputStream.open(fileName, ios::binary | ios::in);
 		outputStream.open(fileName, ios::binary | ios::in | ios::out);
@@ -534,10 +765,10 @@ public:
 	size_t& getNextId() { return id; }
 	void incrementId() { id++; }
 
-	vector<uint64_t>& getFreeblocks() {
+	DynamicArray<uint64_t>& getFreeblocks() {
 		return freeBlocks;
 	}
-	vector<uint64_t>& getFreeMeta() {
+	DynamicArray<uint64_t>& getFreeMeta() {
 		return freeMeta;
 	}
 
@@ -584,7 +815,7 @@ public:
 			root->serialize(outputStream);
 
 			// Now after we serialize the root we need to fix the vec and hashtableso
-			vector<uint64_t> offsets_for_upgrading;
+			DynamicArray<uint64_t> offsets_for_upgrading;
 			uint64_t offset;
 			// we need to get firstly the overlapping struct
 			if (vec1CurrSize > vec1AllocatedSize) {
@@ -777,8 +1008,8 @@ struct Block {
 };
 
 
-void InsertionSort(vector<uint64_t>& array, bool descending = false);
-std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
+void InsertionSort(DynamicArray<uint64_t>& array, bool descending = false);
+DynamicArray<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
 void rm(ResourceManager& re, string& fileName, uint64_t actualOffset = -1);
 void InitializeContainer(ResourceManager& re, string& containerPath);
 void ls(ResourceManager& re, string path = "");
@@ -796,8 +1027,8 @@ void rd(ResourceManager& re, string& dirName);
 bool checkNames(ifstream& container, uint64_t parent_offset, string dirName);
 uint64_t getMetadataOff(ResourceManager& re, ofstream& contianerWrite, ifstream& containerRead, Metadata& fileMeta);
 
-vector<string> split(const char* str, char delimeter) {
-	vector<string> res;
+DynamicArray<string> split(const char* str, char delimeter) {
+	DynamicArray<string> res;
 
 
 	const char* start = str; // Pointer to the beginning of the substring
@@ -845,7 +1076,7 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 		return;
 	}
 	dp.insert(key, parent.offset);
-	if (!parent.children.size()) {
+	if (!parent.children.getSize()) {
 		getBlockOffsets(re, parent, for_upgrading, base_offset, dp);
 
 	}
@@ -887,12 +1118,12 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 
 		// Update offsets in the hashtable
 		dfs(*re,re->getInputStream(),parent,dp,parent.offset, hash_offsets,sizeDifference);
-		vector<pair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
+		DynamicArray<pair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
 
 		ofstream& contasinerWrite = re->getOutputStream();
 		ifstream& containerRead = re->getInputStream();
 
-		for (int i = 0; i < sorted_offsets.size(); ++i) {
+		for (int i = 0; i < sorted_offsets.getSize(); ++i) {
 			uint64_t curr_offset = sorted_offsets[i].first;
 			StructType curr_type = sorted_offsets[i].second;
 
@@ -960,9 +1191,9 @@ int main(int argc, char* argv[]) {
 	string fileSystem = "container.bin";
 
 
-	string newDir = "Ehee";
+	string newDir = "Ehee\\Ahaa\\Muhaaga\\Ehee1";
 	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	string fileName = "bab21.txt";
+	string fileName = "a111.txt";
 
 	string command = "cpin";
 	if (command == "md") {
@@ -970,7 +1201,7 @@ int main(int argc, char* argv[]) {
 
 		md(resource, newDir);
 	}
-	if (command == "cpin") {
+	else if (command == "cpin") {
 		ResourceManager resource(fileSystem, command);
 		cpin(resource,outfile, fileName, 4096);
 	}
@@ -1013,8 +1244,8 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-void InsertionSort(vector<uint64_t>& array, bool descending) {
-	size_t len = array.size();
+void InsertionSort(DynamicArray<uint64_t>& array, bool descending) {
+	size_t len = array.getSize();
 	for (int i = 1; i < len; ++i) {
 		int key = array[i];
 		int j = i - 1;
@@ -1035,12 +1266,12 @@ void InsertionSort(vector<uint64_t>& array, bool descending) {
 	}
 }
 
-std::vector<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize) {
-	std::vector<uint64_t> allocatedBlocks;
+DynamicArray<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize) {
+	DynamicArray<uint64_t> allocatedBlocks;
 	InsertionSort(re.getFreeblocks());
 	size_t contiguouscount = 1;
 
-	for (size_t i = 1; i < re.getFreeblocks().size(); ++i) {
+	for (size_t i = 1; i < re.getFreeblocks().getSize(); ++i) {
 		if (re.getFreeblocks()[i] == re.getFreeblocks()[i - 1] + blockSize) {
 			++contiguouscount;
 			if (contiguouscount == requiredBlocks) {
@@ -1086,8 +1317,8 @@ void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	vector<string> directories = split(fileName.c_str(), '\\');
-	vector<uint64_t> offsets;
+	DynamicArray<string> directories = split(fileName.c_str(), '\\');
+	DynamicArray<uint64_t> offsets;
 	uint64_t child_offset = re.getCurrentDirOffset();
 	uint64_t parent_offset;
 
@@ -1108,7 +1339,7 @@ void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
 			if (actualOffset != -1) {
 				offset = actualOffset;
 			}
-			else if (directories.size() == 1) {
+			else if (directories.getSize() == 1) {
 				offset = getOffsetByParent(containerRead, child_offset, dir);
 			}
 			else {
@@ -1246,8 +1477,8 @@ void ls(ResourceManager& re, string path) {
 	ifstream& containerRead = re.getInputStream();
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
-	vector<string> directories = split(path.c_str(), '\\');
-	vector<uint64_t> offsets;
+	DynamicArray<string> directories = split(path.c_str(), '\\');
+	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (!directories.empty() && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
@@ -1263,7 +1494,7 @@ void ls(ResourceManager& re, string path) {
 				return;
 			}
 			// checking if the path actually exists by going over the children of every current parent
-			if (directories.size() == 1) {
+			if (directories.getSize() == 1) {
 				offset = getOffsetByParent(containerRead, parent_offset, dir);
 			}
 			else {
@@ -1341,10 +1572,9 @@ void printBlockAndContent(ResourceManager & re, uint64_t offset) {
 	Block* block = Block::deserialize(file);
 	file.clear();
 	file.seekg(block->content_offset, ios::beg);
-	vector<char> buffer(block->size);
+	DynamicArray<char> buffer(block->size);
 
-	file.read(buffer.data(), block->size);
-
+	file.read(buffer.get_data(), block->size);
 	cout << "Block content: ";
 	for (char c : buffer) {
 		cout << c;
@@ -1384,10 +1614,10 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	vector<string> directories = split(fileName.c_str(), '\\');
-	vector<uint64_t> offsets;
+	DynamicArray<string> directories = split(fileName.c_str(), '\\');
+	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
-	if (directories.size() > 1 && hasExtention(directories.back())) {
+	if (directories.getSize() > 1 && hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
@@ -1440,7 +1670,7 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 		parent_offset = offsets.back();
 		fileName = directories.back();
 	}
-	else if (directories.size() == 1 && hasExtention(directories.back())) {
+	else if (directories.getSize() == 1 && hasExtention(directories.back())) {
 		parent_offset = getOffsetByParent(containerRead, re.getCurrentDirOffset(), fileName);
 		if (parent_offset == -1) {
 			cerr << "The file doesnt exist in that folder!\n";
@@ -1523,10 +1753,10 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	vector<string> directories = split(fileName.c_str(), '\\');
-	vector<uint64_t> offsets;
+	DynamicArray<string> directories = split(fileName.c_str(), '\\');
+	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
-	if (directories.size() > 1 && hasExtention(directories.back())) {
+	if (directories.getSize() > 1 && hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			uint64_t offset;
 			// we need to check also if the dir is some of the first because the last doesnt exist;
@@ -1583,7 +1813,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		delete parentMeta;
 		delete childMeta;
 	}
-	else if(directories.size() == 1 && hasExtention(directories.back()) && checkNames(containerRead,re.getCurrentDirOffset(), fileName)) {
+	else if(directories.getSize() == 1 && hasExtention(directories.back()) && checkNames(containerRead,re.getCurrentDirOffset(), fileName)) {
 		parent_offset = re.getCurrentDirOffset(); 
 	}
 	else {
@@ -1630,9 +1860,11 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 
 	uint64_t oldsize = parent->getSerializedSize();
 	parent->children.push_back(fileMeta.offset);
-
-	updateInMemoryOffsets(&re, oldsize, *parent, parent->getSerializedSize());
-	fileMeta.offset = re.getMetadataHashTable().get(key1);
+	if (parent->max_capacity < parent->children.getSize()) {
+		updateInMemoryOffsets(&re, oldsize, *parent, parent->getSerializedSize());
+		fileMeta.offset = re.getMetadataHashTable().get(key1);
+	}
+	parent->max_capacity += sizeof(uint64_t);
 
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
@@ -1654,7 +1886,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	size_t requiredBlocks = (filesize + blockSize - 1) / blockSize; // ceiling divisiopn
 
 	// Step 1: Try to allocated from free blocks
-	vector<uint64_t> allocatedBlocks = allocatedContiguosBlocks(re,requiredBlocks, blockSize);
+	DynamicArray<uint64_t> allocatedBlocks = allocatedContiguosBlocks(re,requiredBlocks, blockSize);
 
 	// Step 2 : If no free blocks are available, append to the end of the file
 	if (allocatedBlocks.empty()) {
@@ -1675,7 +1907,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	char buffer[4096];
 	size_t remainingSize = filesize;
 	uint64_t oldSize = fileMeta.getSerializedSize();
-	for(size_t i =0;i< allocatedBlocks.size();++i){
+	for(size_t i =0;i< allocatedBlocks.getSize();++i){
 
 		size_t chunk_size = std::min(blockSize, remainingSize);
 		src.read(buffer, chunk_size);
@@ -1720,7 +1952,6 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	containerWrite.seekp(fileMeta.offset, ios::beg);
 	fileMeta.serialize(containerWrite);
 
-	
 	// Right here we need to loop over every parent till we reach the root and update their sizes 
 	uint64_t offset = parent_offset;
 	while (true) { // -1 because the parent of the root is -1 by default
@@ -1772,17 +2003,15 @@ bool checkNames(ifstream& container,uint64_t parent_offset, string dirName) {
 // when making a directory we have two options: 1. it is a single directory to make in the current dir (the same as cpin but whithout the extetion check (because its dir)) 
 // 12/16 - works perfectly
 void md(ResourceManager& re, string& directoryName) {
-	
-
 	ifstream& container = re.getInputStream();
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	vector<string> directories = split(directoryName.c_str(), '\\');
-	vector<uint64_t> offsets;
+	DynamicArray<string> directories = split(directoryName.c_str(), '\\');
+	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	container.clear();
-	if (directories.size() > 1 && !hasExtention(directories.back())) {
+	if (directories.getSize() > 1 && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			// we need to check also if the dir is some of the first because the last doesnt exist;
 			if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {
@@ -1827,7 +2056,7 @@ void md(ResourceManager& re, string& directoryName) {
 		parent_offset = offsets.back();
 		directoryName = directories.back();
 	}
-	else if (directories.size() == 1 && !hasExtention(directories.back()) && checkNames(container,re.getCurrentDirOffset(), directoryName)) {
+	else if (directories.getSize() == 1 && !hasExtention(directories.back()) && checkNames(container,re.getCurrentDirOffset(), directoryName)) {
 		parent_offset = re.getCurrentDirOffset();
 	}
 	else {
@@ -1864,8 +2093,11 @@ void md(ResourceManager& re, string& directoryName) {
 	uint64_t oldsize = parentMeta->getSerializedSize();
 	parentMeta->children.push_back(newDirMeta->offset);
 
-	updateInMemoryOffsets(&re, oldsize, *parentMeta, parentMeta->getSerializedSize());
-	newDirMeta->offset = re.getMetadataHashTable().get(key1);
+	if (parentMeta->children.getSize() > parentMeta->max_capacity) {
+		updateInMemoryOffsets(&re, oldsize, *parentMeta, parentMeta->getSerializedSize());
+		newDirMeta->offset = re.getMetadataHashTable().get(key1);
+	}
+	parentMeta->max_capacity += sizeof(uint64_t);
 
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
@@ -1881,9 +2113,9 @@ void cd(ResourceManager& re, string& directoryName) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	vector<string> directories = split(directoryName.c_str(), '\\');
-	vector<uint64_t> offsets;
-	uint64_t parent_offset;
+	DynamicArray<string> directories = split(directoryName.c_str(), '\\');
+	DynamicArray<uint64_t> offsets;
+	uint64_t parent_offset = re.getCurrentDirOffset();
 	container.clear();
 	if (!directories.empty() && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
@@ -1895,18 +2127,19 @@ void cd(ResourceManager& re, string& directoryName) {
 				delete childMeta;
 				return;
 			}
-			if (directories.size() == 1) {
-				offset = getOffsetByParent(container, re.getCurrentDirOffset(), dir);
+			if (directories.getSize() == 1) {
+				offset = getOffsetByParent(container, parent_offset, dir);
 			}
 			else {
-				offset = getOffsetByParent(container, parentMeta->offset, dir);
+				offset = getOffsetByParent(container, parent_offset, dir);
 			}
 			if (directories.back() == dir) {
 				delete parentMeta;
 				delete childMeta;
 				offsets.push_back(offset);
 				break;
-			}			container.seekg(offset, ios::beg);
+			}			
+			container.seekg(offset, ios::beg);
 			childMeta = Metadata::deserialize(container);
 			if (parentMeta != nullptr) {
 				bool isPart = false;
@@ -1924,6 +2157,7 @@ void cd(ResourceManager& re, string& directoryName) {
 
 				}
 			}
+			parent_offset = childMeta->offset;
 			offsets.push_back(offset);
 			delete parentMeta; // free prvious parent
 			parentMeta = childMeta; // current child becomes the new parent
@@ -2001,8 +2235,8 @@ void rd(ResourceManager& re, string& dirName) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	vector<string> directories = split(dirName.c_str(), '\\');
-	vector<uint64_t> offsets;
+	DynamicArray<string> directories = split(dirName.c_str(), '\\');
+	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	// after all of this i need to get the acutal last dir
 	if (!directories.empty() && !hasExtention(directories.back())) {
@@ -2015,7 +2249,7 @@ void rd(ResourceManager& re, string& dirName) {
 				delete childMeta;
 				return;
 			}
-			if (directories.size() == 1) {
+			if (directories.getSize() == 1) {
 				offset = getOffsetByParent(containerRead, parent_offset, dir);
 			}
 			else {
