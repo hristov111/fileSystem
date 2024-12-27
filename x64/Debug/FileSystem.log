@@ -1,425 +1,95 @@
 ﻿  FileName.cpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.41.34120\include\filesystem(12): warning STL4038: The contents of <filesystem> are available only with C++17 or later.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(19,44): error C3861: 'key': identifier not found
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(19,44):
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(646,12): warning C4267: 'return': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1010,2): warning C4984: 'if constexpr' is a C++17 language extension
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1094,26): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1109,30): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1160,3): warning C4984: 'if constexpr' is a C++17 language extension
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1160,3):
       the template instantiation context (the oldest one first) is
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(12,7):
-          while compiling class template 'myPair'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(19,44): error C2065: 'key': undeclared identifier
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(478,4): error C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(488,3): error C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(502,3): error C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(503,3): error C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(518,5): error C4996: 'strncpy': This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(524,5): error C4996: 'strncpy': This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(539,3): error C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(540,3): error C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(592,2): warning C4984: 'if constexpr' is a C++17 language extension
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(676,26): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(691,30): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(742,3): warning C4984: 'if constexpr' is a C++17 language extension
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(742,3):
-      the template instantiation context (the oldest one first) is
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(735,7):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1153,7):
           while compiling class template 'HashTable'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(746,8): warning C4984: 'if constexpr' is a C++17 language extension
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,16): error C3878: syntax error: unexpected token 'keyStr' following 'expression'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,16): message : error recovery skipped: 'identifier = static_cast  . . . identifier'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,48): error C2760: syntax error: ')' was unexpected here; expected ';'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,48): error C3878: syntax error: unexpected token ')' following 'expression_statement'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,48): error C3878: syntax error: unexpected token ')' following 'statement'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,48): error C3878: syntax error: unexpected token ')' following 'statement_seq'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,48):
-      missing one of:  '}' ?
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1164,8): warning C4984: 'if constexpr' is a C++17 language extension
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1571,13): warning C4101: 'offset': unreferenced local variable
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2002,11): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2002,11): warning C4244:         with
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2002,11): warning C4244:         [
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2002,11): warning C4244:             T=uint64_t
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2002,11): warning C4244:         ]
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2674,23): warning C4018: '>': signed/unsigned mismatch
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(67,53): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(67,53):
+      the template instantiation context (the oldest one first) is
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2327,21):
+          see reference to class template instantiation 'DynamicArray<char>' being compiled
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(67,2):
+          while compiling class template member function 'DynamicArray<char>::DynamicArray(size_t)'
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2327,27):
+              see the first reference to 'DynamicArray<char>::DynamicArray' in 'printBlockAndContent'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,48): error C2760: syntax error: ')' was unexpected here; expected '}'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,48): error C3878: syntax error: unexpected token ')' following 'compound_statement'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,48): error C3878: syntax error: unexpected token ')' following 'selection_statement'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(749,48): message : error recovery skipped: ')'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(750,18): error C2065: 'keyStr': undeclared identifier
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1281,6): error C2664: 'std::basic_istream<char,std::char_traits<char>> &std::basic_istream<char,std::char_traits<char>>::read(_Elem *,std::streamsize)': cannot convert argument 1 from 'const char *' to '_Elem *'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1281,6): error C2664:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1281,6): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1281,6): error C2664:             _Elem=char
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1281,6): error C2664:         ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1281,11):
-      Conversion loses qualifiers
-      C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.41.34120\include\istream(515,39):
-      see declaration of 'std::basic_istream<char,std::char_traits<char>>::read'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1281,6):
-      while trying to match the argument list '(const char *, size_t)'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1290,48): error C2039: 'size': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1335,9): error C2676: binary '+=': 'String' does not define this operator or a conversion to a type acceptable to the predefined operator
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664: 'uint64_t HashTable<String,uint64_t>::get(const Key &) const': cannot convert argument 1 from 'T' to 'const Key &'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:             T=std::string
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41): error C2664:         ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,45):
-      Reason: cannot convert from 'T' to 'const Key'
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(201,17): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(201,17):
+      the template instantiation context (the oldest one first) is
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1873,46):
+          see reference to class template instantiation 'DynamicArray<myPair<Key,Value>>' being compiled
           with
           [
-              T=std::string
+              Key=uint64_t,
+              Value=StructType
           ]
-          and
-          [
-              Key=String
-          ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,45):
-      No user-defined-conversion operator available that can perform this conversion, or the operator cannot be called
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(777,11):
-      see declaration of 'HashTable<String,uint64_t>::get'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1393,41):
-      while trying to match the argument list '(T)'
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(192,5):
+          while compiling class template member function 'T &DynamicArray<T>::operator [](size_t)'
           with
           [
-              T=std::string
+              T=myPair<uint64_t,StructType>
           ]
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664: 'bool HashTable<String,uint64_t>::exists(const Key &) const': cannot convert argument 1 from 'T' to 'const Key &'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:             T=std::string
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31): error C2664:         ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,38):
-      Reason: cannot convert from 'T' to 'const Key'
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1879,25):
+              see the first reference to 'DynamicArray<myPair<Key,Value>>::operator []' in 'updateInMemoryOffsets'
           with
           [
-              T=std::string
+              Key=uint64_t,
+              Value=StructType
           ]
-          and
-          [
-              Key=String
-          ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,38):
-      No user-defined-conversion operator available that can perform this conversion, or the operator cannot be called
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(789,7):
-      see declaration of 'HashTable<String,uint64_t>::exists'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1394,31):
-      while trying to match the argument list '(T)'
+  
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(291,11): warning C4267: '-=': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(291,11):
+      the template instantiation context (the oldest one first) is
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1038,25):
+          see reference to class template instantiation 'DynamicArray<uint64_t>' being compiled
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(276,11):
+          while compiling class template member function 'DynamicArray<uint64_t>::iterator DynamicArray<uint64_t>::erase(DynamicArray<uint64_t>::iterator,DynamicArray<uint64_t>::iterator)'
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2031,29):
+              see the first reference to 'DynamicArray<uint64_t>::erase' in 'allocatedContiguosBlocks'
+  
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1264,10): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1264,10):
+      the template instantiation context (the oldest one first) is
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1816,3):
+          see reference to class template instantiation 'HashTable<uint64_t,StructType>' being compiled
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1261,7):
+          while compiling class template member function 'void HashTable<uint64_t,StructType>::InsertionSort(DynamicArray<myPair<Key,Value>> &,bool) const'
           with
           [
-              T=std::string
+              Key=uint64_t,
+              Value=StructType
           ]
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1254,16):
+              see the first reference to 'HashTable<uint64_t,StructType>::InsertionSort' in 'HashTable<uint64_t,StructType>::getsortedByKey'
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1873,61):
+              see the first reference to 'HashTable<uint64_t,StructType>::getsortedByKey' in 'updateInMemoryOffsets'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664: 'void HashTable<String,uint64_t>::insert(const Key &,const Value &)': cannot convert argument 1 from 'T' to 'const Key &'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:             Key=String,
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:             Value=uint64_t
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:             T=std::string
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6): error C2664:         ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,13):
-      Reason: cannot convert from 'T' to 'const Key'
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(302,11): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(302,11):
+      the template instantiation context (the oldest one first) is
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,21):
+          see reference to function template instantiation 'void DynamicArray<uint64_t>::assign<DynamicArray<uint64_t>::iterator>(InputIterator,InputIterator)' being compiled
           with
           [
-              T=std::string
+              InputIterator=DynamicArray<uint64_t>::iterator
           ]
-          and
-          [
-              Key=String
-          ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,13):
-      No user-defined-conversion operator available that can perform this conversion, or the operator cannot be called
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(764,7):
-      see declaration of 'HashTable<String,uint64_t>::insert'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1397,6):
-      while trying to match the argument list '(T, uint64_t)'
-          with
-          [
-              T=std::string
-          ]
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,27):
+              see the first reference to 'DynamicArray<uint64_t>::assign' in 'allocatedContiguosBlocks'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1533,6): error C2666: 'String::operator ==': overloaded functions have similar conversions
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(491,7):
-      could be 'bool String::operator ==(const String &) const'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1533,6):
-      or       'built-in C++ operator==(const char *, const char *)'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1533,6):
-      while trying to match the argument list '(String, const char [3])'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1538,11): error C2666: 'String::operator ==': overloaded functions have similar conversions
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(491,7):
-      could be 'bool String::operator ==(const String &) const'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1538,11):
-      or       'built-in C++ operator==(const char *, const char *)'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1538,11):
-      while trying to match the argument list '(String, const char [5])'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1542,11): error C2666: 'String::operator ==': overloaded functions have similar conversions
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(491,7):
-      could be 'bool String::operator ==(const String &) const'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1542,11):
-      or       'built-in C++ operator==(const char *, const char *)'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1542,11):
-      while trying to match the argument list '(String, const char [3])'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1547,11): error C2666: 'String::operator ==': overloaded functions have similar conversions
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(491,7):
-      could be 'bool String::operator ==(const String &) const'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1547,11):
-      or       'built-in C++ operator==(const char *, const char *)'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1547,11):
-      while trying to match the argument list '(String, const char [6])'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1552,11): error C2666: 'String::operator ==': overloaded functions have similar conversions
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(491,7):
-      could be 'bool String::operator ==(const String &) const'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1552,11):
-      or       'built-in C++ operator==(const char *, const char *)'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1552,11):
-      while trying to match the argument list '(String, const char [3])'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1557,11): error C2666: 'String::operator ==': overloaded functions have similar conversions
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(491,7):
-      could be 'bool String::operator ==(const String &) const'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1557,11):
-      or       'built-in C++ operator==(const char *, const char *)'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1557,11):
-      while trying to match the argument list '(String, const char [3])'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1562,11): error C2666: 'String::operator ==': overloaded functions have similar conversions
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(491,7):
-      could be 'bool String::operator ==(const String &) const'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1562,11):
-      or       'built-in C++ operator==(const char *, const char *)'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1562,11):
-      while trying to match the argument list '(String, const char [3])'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1584,11): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1584,11): warning C4244:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1584,11): warning C4244:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1584,11): warning C4244:             T=uint64_t
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1584,11): warning C4244:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1654,52): error C2039: 'c_str': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1749,30): error C2440: 'initializing': cannot convert from 'T' to 'String'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1749,30): error C2440:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1749,30): error C2440:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1749,30): error C2440:             T=std::string
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1749,30): error C2440:         ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1749,30):
-      No user-defined-conversion operator available that can perform this conversion, or the operator cannot be called
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1814,48): error C2039: 'c_str': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664: 'uint64_t HashTable<String,uint64_t>::get(const Key &) const': cannot convert argument 1 from 'const T' to 'const Key &'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:             T=std::string
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41): error C2664:         ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,45):
-      Reason: cannot convert from 'const T' to 'const Key'
-          with
-          [
-              T=std::string
-          ]
-          and
-          [
-              Key=String
-          ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,45):
-      No user-defined-conversion operator available that can perform this conversion, or the operator cannot be called
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(777,11):
-      see declaration of 'HashTable<String,uint64_t>::get'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1937,41):
-      while trying to match the argument list '(const T)'
-          with
-          [
-              T=std::string
-          ]
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1951,52): error C2039: 'c_str': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664: 'bool HashTable<String,uint64_t>::exists(const Key &) const': cannot convert argument 1 from 'const T' to 'const Key &'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:             T=std::string
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31): error C2664:         ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,38):
-      Reason: cannot convert from 'const T' to 'const Key'
-          with
-          [
-              T=std::string
-          ]
-          and
-          [
-              Key=String
-          ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,38):
-      No user-defined-conversion operator available that can perform this conversion, or the operator cannot be called
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(789,7):
-      see declaration of 'HashTable<String,uint64_t>::exists'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2030,31):
-      while trying to match the argument list '(const T)'
-          with
-          [
-              T=std::string
-          ]
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664: 'uint64_t HashTable<String,uint64_t>::get(const Key &) const': cannot convert argument 1 from 'const T' to 'const Key &'
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:             T=std::string
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:         and
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:             Key=String
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49): error C2664:         ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,53):
-      Reason: cannot convert from 'const T' to 'const Key'
-          with
-          [
-              T=std::string
-          ]
-          and
-          [
-              Key=String
-          ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,53):
-      No user-defined-conversion operator available that can perform this conversion, or the operator cannot be called
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(777,11):
-      see declaration of 'HashTable<String,uint64_t>::get'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2034,49):
-      while trying to match the argument list '(const T)'
-          with
-          [
-              T=std::string
-          ]
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2090,52): error C2039: 'c_str': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2170,36): error C2039: 'c_str': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2170,2): error C2660: 'strncpy_s': function does not take 2 arguments
-      C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h(60,30):
-      see declaration of 'strncpy_s'
-      C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h(327,1):
-      could be 'errno_t strncpy_s(char (&)[_Size],const char *,size_t) throw()'
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2170,2):
-          'errno_t strncpy_s(char (&)[_Size],const char *,size_t) throw()': expects 3 arguments - 2 provided
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2170,2):
-      while trying to match the argument list '(char [100], size_t)'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2262,23): warning C4018: '>': signed/unsigned mismatch
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2278,17): error C2665: 'DynamicArray<std::string>::push_back': no overloaded function could convert all the argument types
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(112,7):
-      could be 'void DynamicArray<std::string>::push_back(T &&)'
-          with
-          [
-              T=std::string
-          ]
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2278,17):
-          'void DynamicArray<std::string>::push_back(T &&)': cannot convert argument 1 from 'String' to 'T &&'
-          with
-          [
-              T=std::string
-          ]
-              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2278,32):
-              Reason: cannot convert from 'String' to 'T'
-          with
-          [
-              T=std::string
-          ]
-              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2278,32):
-              No user-defined-conversion operator available that can perform this conversion, or the operator cannot be called
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(105,7):
-      or       'void DynamicArray<std::string>::push_back(T &)'
-          with
-          [
-              T=std::string
-          ]
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2278,17):
-          'void DynamicArray<std::string>::push_back(T &)': cannot convert argument 1 from 'String' to 'T &'
-          with
-          [
-              T=std::string
-          ]
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2278,17):
-      while trying to match the argument list '(String)'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2344,57): error C2039: 'c_str': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2408,44): error C2039: 'c_str': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2408,2): error C2660: 'strncpy_s': function does not take 2 arguments
-      C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h(60,30):
-      see declaration of 'strncpy_s'
-      C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h(327,1):
-      could be 'errno_t strncpy_s(char (&)[_Size],const char *,size_t) throw()'
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2408,2):
-          'errno_t strncpy_s(char (&)[_Size],const char *,size_t) throw()': expects 3 arguments - 2 provided
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2408,2):
-      while trying to match the argument list '(char [100], size_t)'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2450,57): error C2039: 'c_str': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2572,51): error C2039: 'c_str': is not a member of 'String'
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(465,7):
-      see declaration of 'String'
-  
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(304,10): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+  FileSystem.vcxproj -> C:\Users\vboxuser\source\repos\FileSystem\x64\Debug\FileSystem.exe

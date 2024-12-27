@@ -16,7 +16,7 @@ public:
 
 	myPair(const Key& key, const Value& value) : first(key), second(value) {}
 
-	myPair(Key&& , Value&& value): first(move(key)), second(move(value)) {}
+	myPair(Key&& key, Value&& value): first(move(key)), second(move(value)) {}
 
 
 	myPair() : first(), second() {}
@@ -65,6 +65,7 @@ private:
 
 public:
 	DynamicArray(size_t inititalCapacity=10) : capacity(inititalCapacity), size(0) {
+		cout << "Constructor called";
 		data = new T[capacity];
 		for (size_t i = size; i < capacity; ++i) {
 			data[i] = T();
@@ -72,7 +73,28 @@ public:
 		}
 	}
 
+	DynamicArray(DynamicArray&& other) noexcept : data(other.data), capacity(other.capacity),
+	size(other.size){
+		other.data = nullptr;
+		other.capacity = 0;
+		other.size = 0;
+	}
+	DynamicArray& operator=(DynamicArray&& other) noexcept {
+		if (this != &other) {
+			delete[] data; // Free current memory
+			data = other.data;
+			capacity = other.capacity;
+			size = other.size;
+
+			other.data = nullptr;
+			other.capacity = 0;
+			other.size = 0;
+		}
+		return *this;
+	}
+
 	~DynamicArray() {
+		cout << "Destructor called\n";
 		delete[] data;
 	}
 
@@ -168,9 +190,13 @@ public:
 	}
 
 	T& operator[](size_t index) {
-		if (index >= capacity) {
-			resize(index + 1); // resize capacity
+
+		static T defaultValue = T();
+
+		if (index < 0 || index >= capacity) {
+			return defaultValue;
 		}
+		// adjust the= size only for valid indeces
 		if (index >= size) {
 			size = index + 1; // adjust size
 		}
@@ -178,12 +204,13 @@ public:
 	}
 
 	const T& operator[](size_t index) const {
-		if (index >= capacity) {
-			resize(index + 1); // resize capacity
+		static const T defaultValue = T(); // Default value for invalid indices (const)
+
+		// Check for negative or out-of-bounds index
+		if (index < 0 || index >= capacity) {
+			return defaultValue; // Return the default value without resizing
 		}
-		if (index >= size) {
-			size = index + 1; // adjust size
-		}
+
 		return data[index];
 	}
 
@@ -358,8 +385,9 @@ public:
 	}
 
 	Value& operator[](int index) {
+		static Value defaultValue = Value();
 		if (index < 0 || static_cast<size_t>(index) >= size) {
-			out_of_range("Index out ofr ange");
+			return defaultValue;
 		}
 		node<Value>* temp = head;
 		for (int i = 0; i < index; ++i) {
@@ -368,8 +396,10 @@ public:
 		return temp->getval();
 	}
 	const Value& operator[](int index) const {
+		static Value defaultValue = Value();
+
 		if (index < 0 || static_cast<size_t>(index) >= size) {
-			out_of_range("Index out ofr ange");
+			return defaultValue;
 		}
 		node<Value>* temp = head;
 		for (int i = 0; i < index; ++i) {
@@ -418,6 +448,29 @@ public:
 	};
 	Iterator begin() const { return Iterator(head); }
 	Iterator end() const { return Iterator(nullptr); }
+	class ConstIterator {
+        const node<Value>* current;
+
+    public:
+        explicit ConstIterator(const node<Value>* start) : current(start) {}
+
+        const Value& operator*() const { return current->getval(); }
+        const Value* operator->() const { return &current->getval(); }
+
+        ConstIterator& operator++() {
+            if (current) current = current->getNext();
+            return *this;
+        }
+
+        ConstIterator operator++(int) {
+            ConstIterator temp = *this;
+            ++(*this);
+            return temp;
+        }
+
+        bool operator==(const ConstIterator& other) const { return current == other.current; }
+        bool operator!=(const ConstIterator& other) const { return current != other.current; }
+    };
 
 
 	Iterator erase(Iterator it) {
@@ -462,6 +515,29 @@ public:
 	}
 };
 
+template <typename Value, size_t TABLE_SIZE>
+class SafeList {
+	LinkedList<Value> table[TABLE_SIZE];
+
+public:
+	LinkedList<Value>& operator[](int index) {
+		static LinkedList<Value> emptyList;
+		if (index < 0 || index > static_cast<int>(TABLE_SIZE)) {
+			return emptyList;
+		}
+		return table[index];
+	}
+
+	const LinkedList<Value>& operator[](int index) const {
+		static LinkedList<Value> emptyList;
+
+		if (index < 0 || index > static_cast<int>(TABLE_SIZE)) {
+			return emptyList;
+		}
+		return table[index];
+	}
+};
+
 class String {
 private:
 	char* data; // pointer to dynamically allocated memory for the string
@@ -470,7 +546,13 @@ private:
 public:
 	String() : data(nullptr), length(0) {}
 
-
+	String(size_t len, char fillchar) : length(len) {
+		data = new char[length + 1];
+		for (size_t i = 0; i < length; ++i) {
+			data[i] = fillchar; //Fill with the specified character
+		}
+		data[length] = '\0';
+	}
 	String(const char* str, size_t len = -1) {
 		if (str == nullptr) {
 			// Handle null pointer case
@@ -510,16 +592,72 @@ public:
 	}
 
 	String(const String& other) {
+		std::cout << "Copy constructor called for String: " << other.data << std::endl;
+
 		length = other.length;
 		data = new char[length + 1]; // allocate memory for the new string
-		strcpy(data, other.data); // copy the string
+		custom_strcpy(data, other.data); // copy the string
+	}
+
+	String(String&& other) noexcept : data(other.data), length(other.length) {
+		std::cout << "Move constructor called for String: " << (other.data ? other.data : "null") << std::endl;
+
+		other.data = nullptr;
+		other.length = 0;
+	}
+
+	String& operator=(const String& other) {
+		if (this != &other) {
+			delete[] data;
+			length = other.length;
+			data = new char[length + 1];
+			for (size_t i = 0; i < length; ++i) {
+				data[i] = other.data[i];
+			}
+			data[length] = '\0';
+		}
+
+		return *this;
+	}
+
+	String& operator=(String&& other) noexcept {
+		if (this != &other) {
+			delete[] data;
+			data = other.data;
+			length = other.length;
+
+			other.data = nullptr;
+			other.length = 0;
+		}
+		return *this;
+	}
+
+
+	int find(const String& substring) const {
+		if (substring.length == 0 || substring.length > length) {
+			return -1;
+		}
+		for (size_t i = 0; i <= length - substring.length; ++i) {
+			size_t j = 0;
+			while (j < substring.length && data[i + j] == substring.data[j]) {
+				++j;
+			}
+			if (j == substring.length) {
+				return i; // Found the substring
+			}
+		}
+		return -1;
 	}
 
 	bool operator==(const String& other) const {
-		return strcmp(data, other.data) == 0;
+		return custom_strcmp(data, other.data) == 0;
 	}
 
-	String to_string(int value) {
+	bool operator==(const char* otherData) const {
+		return custom_strcmp(data, otherData) == 0;
+	}
+
+	static String to_string(int value) {
 		char buffer[12];
 		int index = 0;
 
@@ -554,12 +692,34 @@ public:
 	bool operator!=(const String& other) const {
 		return !(*this == other);
 	}
+	String& operator+=(const String& other) {
+		size_t newLenght = length + other.length;
+		char* newData = new char[newLenght + 1];
+
+
+		// copy current data
+		for (size_t i = 0; i < length; ++i) {
+			newData[i] = data[i];
+		}
+		// append other data
+		for (size_t i = 0; i < other.length; ++i) {
+			newData[length + i] = other.data[i];
+		}
+
+		newData[newLenght] = '\0';
+		delete[] data;
+		data = newData;
+		length = newLenght;
+
+		return *this;
+	}
+
 	// Conacatenation with another String object
 	String operator+(const String& other) const {
 		size_t newLength = length + other.length;
 		char* newData = new char[newLength + 1];
-		strcpy(newData, data); // cpy the current string
-		strcat(newData, other.data); // Append the other stirng
+		custom_strcpy(newData, data); // cpy the current string
+		custom_strcat(newData, other.data); // Append the other stirng
 		String result(newData);
 		delete[] newData;
 		return result;
@@ -574,13 +734,13 @@ public:
 		if (newSize > length) {
 			// copy existing data and fill extra space with fillchar
 			if (data) {
-				strncpy(newData, data, length);
+				custom_strncpy(newData, data, length);
 			}
 			fill(newData + length, newData + newSize, fillchar);
 		}
 		else {
 			if (data) {
-				strncpy(newData, data, newSize);
+				custom_strncpy(newData, data, newSize);
 			}
 		}
 
@@ -593,10 +753,10 @@ public:
 
 	// Concatenation with const char* (String + const char*)
 	String operator+(const char* str) const {
-		size_t newLength = length + strlen(str);
+		size_t newLength = length + custom_strlen(str);
 		char* newData = new char[newLength + 1];
-		strcpy(newData, data);
-		strcat(newData, str);
+		custom_strcpy(newData, data);
+		custom_strcat(newData, str);
 		String res(newData); 
 		delete[] newData;
 		return res;
@@ -615,11 +775,17 @@ public:
 		return String(str) + s; // Use the existing String + String operator
 	}
 	const char& operator[](size_t index) const {
-		if (index >= length) throw out_of_range("Index out of range");
+		if (index >= length) {
+			static const char defaultChar = '\0';
+			return defaultChar;
+		}
 		return data[index];
 	}
 	char& operator[](size_t index) {
-		if (index >= length) throw out_of_range("Index out of range");
+		if (index >= length) {
+			static char defaultChar = '\0';
+			return defaultChar;
+		}
 		return data[index];
 	}
 
@@ -628,6 +794,195 @@ public:
 	friend ostream& operator<<(ostream& os, const String& str) {
 		os << str.data;
 		return os;
+	}
+
+	size_t custom_strlen(const char* str) const{
+		size_t length = 0;
+		while (str[length] != '\0') {
+			++length;
+		}
+		return length;
+	}
+
+	static char* custom_strcpy(char* dest, const char* src) {
+		size_t i = 0;
+		while (src[i] != '\0') {
+			dest[i] = src[i];
+			++i;
+		}
+		dest[i] = '\0';
+		return dest;
+
+	}
+
+	static int custom_strcmp(const char* str1, const char* str2) {
+		size_t i = 0;
+		while (str1[i] != '\0' && str2[i] != '\0') {
+			if (str1[i] != str2[i]) {
+				return (str1[i] > str2[i]) ? 1 : -1;
+			}
+			++i;
+		}
+		if (str1[i] == '\0' && str2[i] == '\0') {
+			return 0; // strings are eqeual;
+		}
+		return (str1[i] > str2[i]) ? 1 : -1;
+	}
+
+	static char* custom_strcat(char* dest, const char* src) {
+		size_t dest_len = 0;
+		while (dest[dest_len] != '\0') {
+			++dest_len;
+		}
+		size_t i = 0;
+		while (src[i] != '\0') {
+			dest[dest_len + 1] = src[i];
+			++i;
+		}
+
+		dest[dest_len + i] = '\0';
+		return dest;
+	}
+
+	static char* custom_strncpy(char* dest, const char* src, size_t n)  {
+		size_t i = 0; 
+		while (i < n && src[i] != '\0') {
+			dest[i] = src[i];
+			++i;
+		}
+		while (i < n) {
+			dest[i] = '\0';
+			++i;
+		}
+		return dest;
+	}
+
+	static int custom_strcncpy_s(char* dest, size_t destSize, const char* src, size_t count) {
+		// check fo null pointers
+		if (dest == nullptr || src == nullptr) {
+			return -1;
+		}
+
+		// Check if dest size is valid
+		if (destSize == 0) {
+			return -2;
+		}
+
+		// ensure destination has enough space
+		if (destSize <= count) {
+			if (destSize > 0) {
+				dest[0] = '\0';
+			}
+			return -3;
+		}
+
+		// copy up to count characters from 'src' to 'dest'
+		size_t i = 0;
+		while (i < count && src[i] != '\0') {
+			dest[i] = src[i];
+			++i;
+		}
+
+
+		dest[i] = '\0';
+
+		return 0;
+	}
+	
+
+	class Iterator {
+	private:
+		char* current;
+
+	public:
+		Iterator(char* ptr) : current(ptr){}
+
+		char& operator*() {
+			return *current;
+		}
+		char* operator->() {
+			return current;
+		}
+
+		// Pre-Increment 
+		Iterator& operator++() {
+			++current;
+			return *this;
+		}
+		Iterator operator++(int) {
+			Iterator temp = *this;
+			++current;
+			return temp;
+		}
+
+		// Equality
+		bool operator==(const Iterator& other) const {
+			return current == other.current;
+		}
+		bool operator!=(const Iterator& other) const {
+			return current != other.current;
+		}
+	};
+
+	Iterator begin() {
+		return Iterator(data);
+	}
+	Iterator end() {
+		return Iterator(data + length);
+	}
+	class ConstIterator {
+	private:
+		const char* current;
+
+	public:
+		// Constructor
+		ConstIterator(const char* ptr) : current(ptr) {}
+
+		// Dereference operator
+		const char& operator*() const {
+			return *current;
+		}
+
+		// Arrow operator
+		const char* operator->() const {
+			return current;
+		}
+
+		// Pre-increment (++it)
+		ConstIterator& operator++() {
+			++current;
+			return *this;
+		}
+
+		// Post-increment (it++)
+		ConstIterator operator++(int) {
+			ConstIterator temp = *this;
+			++current;
+			return temp;
+		}
+
+		// Equality comparison
+		bool operator==(const ConstIterator& other) const {
+			return current == other.current;
+		}
+
+		// Inequality comparison
+		bool operator!=(const ConstIterator& other) const {
+			return current != other.current;
+		}
+	};
+
+	ConstIterator begin() const {
+		return ConstIterator(data);
+	}
+
+	ConstIterator end() const {
+		return ConstIterator(data + length);
+	}
+
+	~String() {
+		std::cout << "Destructor called for String: " << (data ? data : "null") << std::endl;
+		delete[] data;
 	}
 };
 
@@ -679,7 +1034,7 @@ struct Metadata {
 	bool isDirectory; // True if it's a directory
 	uint64_t offset; // offset in the container
 	uint64_t size; // size of the file (0 for directories)
-	DynamicArray<string> keys; // keys to the hashtable for the blocks
+	DynamicArray<String> keys; // keys to the hashtable for the blocks
 	DynamicArray<uint64_t> children; // offsets of child files or directories 
 	uint64_t parent; // Parent directory's index in the metadata (0 for root)
 	bool isDeleted;
@@ -702,9 +1057,9 @@ struct Metadata {
 
 		// Write each string in the vectopr
 		for (const auto& key : keys) {
-			size_t keyLength = key.size();
+			size_t keyLength = key.getSize();
 			out.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
-			out.write(key.data(), keyLength);
+			out.write(key.getData(), keyLength);
 		}
 		size_t children_count = children.getSize();
 		out.write(reinterpret_cast<const char*>(&children_count), sizeof(children_count));
@@ -776,7 +1131,7 @@ struct Metadata {
 		uint64_t keysSize = sizeof(size_t);
 		for (const auto& key : keys) {
 			keysSize += sizeof(size_t); // each string's length
-			keysSize += key.size(); // each string's content
+			keysSize += key.getSize(); // each string's content
 		}
 
 		// Dynamic-size member: children
@@ -798,7 +1153,7 @@ template<typename Key, typename Value>
 class HashTable {
 private:
 	static const int TABLE_SIZE = 100;
-	LinkedList<myPair<Key, Value>> table[TABLE_SIZE];
+	SafeList<myPair<Key, Value>, TABLE_SIZE> table;;
 
 	// custom hash function
 	int hashFunction(const Key& key) const {
@@ -809,7 +1164,7 @@ private:
 		else if constexpr (std::is_convertible<Key, String>::value) {
 			// If key is convertible to a string (e.g., std::string)
 			int hash = 0;
-			std::String keyStr = static_cast<String>(key);
+			String keyStr = static_cast<String>(key);
 			for (char c : keyStr) {
 				hash = (hash * 31 + c) % TABLE_SIZE;
 			}
@@ -948,9 +1303,9 @@ public:
 		// Write each key-value pair
 		for (int i = 0; i < TABLE_SIZE; ++i) {
 			for (const auto& kv : table[i]) {
-				size_t keyLength = kv.first.size();
+				size_t keyLength = kv.first.getSize();
 				out.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
-				out.write(kv.first.data(), keyLength);
+				out.write(kv.first.getData(), keyLength);
 				out.write(reinterpret_cast<const char*>(&kv.second), sizeof(kv.second));
 			}
 		}
@@ -961,7 +1316,7 @@ public:
 		for (int i = 0; i < TABLE_SIZE; ++i) {
 			for (const auto& kv : table[i]) {
 				totalsize += sizeof(size_t);                // For keyLength
-				totalsize += kv.first.size();              // For key data
+				totalsize += kv.first.getSize();              // For key data
 				totalsize += sizeof(kv.second);            // For value data
 			}
 		}
@@ -1395,7 +1750,7 @@ struct Block {
 	String hashBlock(const char* block, size_t size) {
 		String hash;
 		for (size_t i = 0; i < size; ++i) {
-			hash += to_string((block[i] + i) % 256);
+			hash += String::to_string((block[i] + i) % 256);
 		}
 		return hash;
 	}
@@ -1590,7 +1945,7 @@ int main(int argc, char* argv[]) {
 
 	String newDir = "Ehee\\Ahaa\\Muhaaga\\Ehee1";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	String fileName = "aha1.txt";
+	String fileName = "eeeea1.txt";
 
 	String command = "cpin";
 	if (command == "md") {
@@ -1714,7 +2069,7 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<String> directories = split(fileName.c_str(), '\\');
+	DynamicArray<String> directories = split(fileName.getData(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t child_offset = re.getCurrentDirOffset();
 	uint64_t parent_offset;
@@ -1874,7 +2229,7 @@ void ls(ResourceManager& re, String path) {
 	ifstream& containerRead = re.getInputStream();
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
-	DynamicArray<String> directories = split(path.c_str(), '\\');
+	DynamicArray<String> directories = split(path.getData(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (!directories.empty() && !hasExtention(directories.back())) {
@@ -2011,7 +2366,7 @@ void cpout(ResourceManager& re, String fileName, const String outputPath) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<String> directories = split(fileName.c_str(), '\\');
+	DynamicArray<String> directories = split(fileName.getData(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (directories.getSize() > 1 && hasExtention(directories.back())) {
@@ -2150,7 +2505,7 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<String> directories = split(fileName.c_str(), '\\');
+	DynamicArray<String> directories = split(fileName.getData(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (directories.getSize() > 1 && hasExtention(directories.back())) {
@@ -2164,8 +2519,6 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 				delete childMeta;
 				return;
 			}
-			 
-
 			 
 			if (directories.back() == dir) {
 				// check if there is a file with the same name in the last dir
@@ -2230,7 +2583,7 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 	// CREATE THE FILE
 	// Metadata for the file
 	Metadata fileMeta;
-	strncpy_s(fileMeta.name, fileName.c_str(), sizeof(fileMeta.name));
+	String::custom_strncpy(fileMeta.name, fileName.getData(), sizeof(fileMeta.name));
 	fileMeta.isDirectory = false;
 	fileMeta.isDeleted = false;
 	fileMeta.size = 0;
@@ -2273,10 +2626,6 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 	src.seekg(0, ios::end);
 	size_t filesize = src.tellg();
 	src.seekg(0, ios::beg);
-
-	containerRead.clear();
-	containerRead.seekg(fileMeta.offset, ios::beg);
-	Metadata* de4 = Metadata::deserialize(containerRead);
 	
 	// --------------------------- CALCULATION OF THE REQUIRED BLOCKS
 	// Calculate the required number of blocks
@@ -2404,7 +2753,7 @@ void md(ResourceManager& re, String& directoryName) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<String> directories = split(directoryName.c_str(), '\\');
+	DynamicArray<String> directories = split(directoryName.getData(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	container.clear();
@@ -2468,7 +2817,7 @@ void md(ResourceManager& re, String& directoryName) {
 
 	// Create new directory metadata
 	Metadata* newDirMeta = new Metadata();
-	strncpy_s(newDirMeta->name, directoryName.c_str(), sizeof(newDirMeta->name));
+	String::custom_strncpy(newDirMeta->name, directoryName.getData(), sizeof(newDirMeta->name));
 	newDirMeta->isDirectory = true;
 	newDirMeta->size = 0;
 	newDirMeta->parent = parent_offset;
@@ -2510,7 +2859,7 @@ void cd(ResourceManager& re, String& directoryName) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<String> directories = split(directoryName.c_str(), '\\');
+	DynamicArray<String> directories = split(directoryName.getData(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	container.clear();
@@ -2632,7 +2981,7 @@ void rd(ResourceManager& re, String& dirName) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<String> directories = split(dirName.c_str(), '\\');
+	DynamicArray<String> directories = split(dirName.getData(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	// after all of this i need to get the acutal last dir
