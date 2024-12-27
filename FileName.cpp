@@ -2,12 +2,59 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <list>
 #include <string>
 #include <functional> 
 #include <type_traits>
 #include <iterator> // For std::iterator
 using namespace std;
+
+template <typename Key, typename Value>
+class myPair {
+public:
+	Key first;
+	Value second;
+
+	myPair(const Key& key, const Value& value) : first(key), second(value) {}
+
+	myPair(Key&& , Value&& value): first(move(key)), second(move(value)) {}
+
+
+	myPair() : first(), second() {}
+
+	myPair(const myPair& other) : first(other.first), second(other.second) {}
+
+	myPair(myPair&& other) noexcept : first(move(other.first)), second(move(other.second)) {}
+
+	// Assigment oprator
+	myPair& operator=(const myPair& other) {
+		if (this != &other) {
+			first = other.first;
+			second = other.second;
+		}
+		return *this;
+	}
+	// Move asssigment oprator
+	myPair& operator=(myPair && other) noexcept{
+		if (this != &other) {
+			first = move(other.first);
+			second = move(other.second);
+		}
+		return *this;
+	}
+
+	bool operator==(const myPair& other) const {
+		return first == other.first && second == other.second;
+	}
+
+	bool operator!=(const myPair& other) const {
+		return !(*this == other);
+	}
+
+	
+	
+
+};
+
 
 template<typename T>
 class DynamicArray {
@@ -237,6 +284,356 @@ public:
 
 };
 
+template<typename Value>
+class node {
+	Value val;
+	node* next;
+
+public:
+	template <typename... Args>
+	node(Args&&... args): val(std::forward<Args>(args)...) ,next(nullptr) {}
+
+	Value& getval() {
+		return val;
+	}
+	const Value& getval() const {
+		return val;
+	}
+
+	node* getNext() {
+		return next;
+	}
+	void setValue(Value value) {
+		val = value;
+	}
+	void setNext(node* Next) {
+		next = Next;
+	}
+
+
+};
+template <typename Value>
+class LinkedList {
+	node<Value>* head;
+	size_t size;
+
+public:
+	LinkedList() : head(nullptr), size(0) {}
+
+	// add a new node to the end of the list
+	void append(Value value) {
+		node<Value>* newNode = new node<Value>(value);
+		if (!head) {
+			head = newNode;
+		}
+		else {
+			node<Value>* temp = head;
+			while (temp->getNext() != nullptr) {
+				temp = temp->getNext();
+			}
+			temp->setNext(newNode);
+		}
+		++size;
+	}
+
+	// Emplace back: construct Value in-place in a new node
+	template<typename... Args>
+	void emplace_back(Args&&... args) {
+		node<Value>* newNode = new node<Value>(forward<Args>(args)...);
+		if (!head) {
+			head = newNode;
+		}
+		else {
+			node<Value>* temp = head;
+			while (temp->getNext() != nullptr) {
+				temp = temp->getNext();
+			}
+			temp->setNext(newNode);
+		}
+		++size;
+	}
+
+	size_t getSize() const {
+		return size;
+	}
+
+	Value& operator[](int index) {
+		if (index < 0 || static_cast<size_t>(index) >= size) {
+			out_of_range("Index out ofr ange");
+		}
+		node<Value>* temp = head;
+		for (int i = 0; i < index; ++i) {
+			temp = temp->getNext();
+		}
+		return temp->getval();
+	}
+	const Value& operator[](int index) const {
+		if (index < 0 || static_cast<size_t>(index) >= size) {
+			out_of_range("Index out ofr ange");
+		}
+		node<Value>* temp = head;
+		for (int i = 0; i < index; ++i) {
+			temp = temp->getNext();
+		}
+		return temp->getval();
+	}
+	class Iterator {
+		node<Value>* current;
+		node<Value>* previous; // Track the previous node
+
+	public:
+		Iterator(node<Value>* start, node<Value>* prev = nullptr) : current(start), previous(prev) {}
+
+
+		node<Value>* getCurrent() { return current; }
+		const node<Value>* getCurrent() const { return current; }
+
+		node<Value>* getPrevious() { return previous; }
+		const node<Value>* getPrevious() const { return previous; }
+
+		void setCurrent(node<Value>* newCurrent) { current = newCurrent; }
+
+
+		// Pre-increment (++it)
+		Iterator& operator++() {
+			if (current) current = current->getNext();
+			return *this;
+		}
+
+		// Post-increment (it++)
+		Iterator operator++(int) {
+			Iterator temp = *this;
+			if (current) current = current->getNext();
+			return temp;
+		}
+
+		Value& operator*() const { return current->getval(); }
+
+		// Arrow operator (it->first, it->second)
+		Value* operator->() const { return &(current->getval()); }
+
+		bool operator!=(const Iterator& other) const { return current != other.getCurrent(); }
+
+		
+	};
+	Iterator begin() const { return Iterator(head); }
+	Iterator end() const { return Iterator(nullptr); }
+
+
+	Iterator erase(Iterator it) {
+		if (it.getCurrent() == nullptr) {
+			out_of_range("Iterator out of range");
+		}
+
+		node<Value>* toDelete = it.getCurrent();
+
+		if (toDelete == head) {
+			// special case: removing the head
+			head = head->getNext();
+		}
+		else {
+			// General case: bypass  the current node
+			if (it.getPrevious()) {
+				it.getPrevious()->setNext(toDelete->getNext());
+			}
+		}
+		it.setCurrent(toDelete->getNext());
+		delete toDelete;
+		--size;
+
+		return it;
+
+	}
+
+
+	void clear() {
+		node<Value>* temp;
+		while (head != nullptr) {
+			temp = head;
+			head = head->getNext();
+			delete temp;
+		}
+		head = nullptr;
+		size = 0;
+	}
+
+	~LinkedList() {
+		clear();
+	}
+};
+
+class String {
+private:
+	char* data; // pointer to dynamically allocated memory for the string
+	size_t length;
+
+public:
+	String() : data(nullptr), length(0) {}
+
+
+	String(const char* str, size_t len = -1) {
+		if (str == nullptr) {
+			// Handle null pointer case
+			length = 0;
+			data = new char[1];
+			data[0] = '\0'; // Null-terminate
+			return;
+		}
+
+		if (len == static_cast<size_t>(-1)) {
+			size_t temp_len = 0;
+			while (str[temp_len] != '\0') {
+				++temp_len;
+			}
+
+			len= temp_len;
+		}
+
+		// ensure provided len is valid
+		size_t actualLen = 0;
+		while (str[actualLen] != '\0') {
+			++actualLen;
+		}
+		if (len > actualLen) {
+			invalid_argument("Provided length exceeds the actual length");
+		}
+		length = len;
+
+		// Calculate length manually (no strlen)
+		data = new char[length + 1]; // Allocate memory for characters + null-terminator
+
+		for (size_t i = 0; i < length; ++i) {
+			data[i] = str[i]; // Copy each character
+		}
+
+		data[length] = '\0'; // Null-terminate
+	}
+
+	String(const String& other) {
+		length = other.length;
+		data = new char[length + 1]; // allocate memory for the new string
+		strcpy(data, other.data); // copy the string
+	}
+
+	bool operator==(const String& other) const {
+		return strcmp(data, other.data) == 0;
+	}
+
+	String to_string(int value) {
+		char buffer[12];
+		int index = 0;
+
+		if (value == 0) {
+			buffer[index++] = '0';
+		}
+
+		bool isNegative = (value < 0);
+		if (isNegative) {
+			value = -value;
+		}
+
+		// extract all the digits from the number
+		while (value > 0) {
+			buffer[index++] = '0' + (value % 10); // get the last digit as a character
+			value /= 10;
+		}
+
+		// add negative sign
+		if (isNegative) {
+			buffer[index++] = '-';
+		}
+
+		// reverse the order to get the correct
+		for (int i = 0, j = index - 1; i < j; ++i, --j) {
+			char temp = buffer[i];
+			buffer[i] = buffer[j];
+			buffer[j] = temp;
+		}
+		return String(buffer);
+	}
+	bool operator!=(const String& other) const {
+		return !(*this == other);
+	}
+	// Conacatenation with another String object
+	String operator+(const String& other) const {
+		size_t newLength = length + other.length;
+		char* newData = new char[newLength + 1];
+		strcpy(newData, data); // cpy the current string
+		strcat(newData, other.data); // Append the other stirng
+		String result(newData);
+		delete[] newData;
+		return result;
+	}
+
+	void resize(size_t newSize, char fillchar = '\0') {
+		if (newSize == length) {
+			return; // n  resizeing needed
+		}
+
+		char* newData = new char[newSize + 1];
+		if (newSize > length) {
+			// copy existing data and fill extra space with fillchar
+			if (data) {
+				strncpy(newData, data, length);
+			}
+			fill(newData + length, newData + newSize, fillchar);
+		}
+		else {
+			if (data) {
+				strncpy(newData, data, newSize);
+			}
+		}
+
+		newData[newSize] = '\0'; // Null-terminate the string
+
+		delete[] data;
+		data = newData;
+		length = newSize;
+	}
+
+	// Concatenation with const char* (String + const char*)
+	String operator+(const char* str) const {
+		size_t newLength = length + strlen(str);
+		char* newData = new char[newLength + 1];
+		strcpy(newData, data);
+		strcat(newData, str);
+		String res(newData); 
+		delete[] newData;
+		return res;
+	}
+	const char *getData()const  {
+		return data;
+	}
+	char* getData(){
+		return data;
+	}
+
+	operator const char* () const {
+		return getData();
+	}
+	friend String operator+(const char* str, const String& s) {
+		return String(str) + s; // Use the existing String + String operator
+	}
+	const char& operator[](size_t index) const {
+		if (index >= length) throw out_of_range("Index out of range");
+		return data[index];
+	}
+	char& operator[](size_t index) {
+		if (index >= length) throw out_of_range("Index out of range");
+		return data[index];
+	}
+
+	size_t getSize() const { return length; }
+
+	friend ostream& operator<<(ostream& os, const String& str) {
+		os << str.data;
+		return os;
+	}
+};
+
+
+
+
 
 
 
@@ -367,8 +764,8 @@ struct Metadata {
 
 	}
 
-	string makeKey() {
-		return string(name) +"_"+my_string(id);
+	String makeKey() {
+		return String(name) +"_"+my_string(id);
 	}
 
 	uint64_t getSerializedSize() const {
@@ -401,7 +798,7 @@ template<typename Key, typename Value>
 class HashTable {
 private:
 	static const int TABLE_SIZE = 100;
-	std::list<std::pair<Key, Value>> table[TABLE_SIZE];
+	LinkedList<myPair<Key, Value>> table[TABLE_SIZE];
 
 	// custom hash function
 	int hashFunction(const Key& key) const {
@@ -409,10 +806,10 @@ private:
 			// If key is an integer
 			return key % TABLE_SIZE;
 		}
-		else if constexpr (std::is_convertible<Key, std::string>::value) {
+		else if constexpr (std::is_convertible<Key, String>::value) {
 			// If key is convertible to a string (e.g., std::string)
 			int hash = 0;
-			std::string keyStr = static_cast<std::string>(key);
+			std::String keyStr = static_cast<String>(key);
 			for (char c : keyStr) {
 				hash = (hash * 31 + c) % TABLE_SIZE;
 			}
@@ -477,7 +874,7 @@ public:
 	}
 
 
-	bool remove(const string& key) {
+	bool remove(const String& key) {
 		int index = hashFunction(key);
 
 		for (auto it = table[index].begin(); it != table[index].end(); it++) {
@@ -489,8 +886,8 @@ public:
 		return false; // key not found
 	}
 
-	DynamicArray<pair<Key,Value>> getsortedByKey(bool key=true) const{
-		DynamicArray<pair<Key, Value>> allPairs;
+	DynamicArray<myPair<Key,Value>> getsortedByKey(bool key=true) const{
+		DynamicArray<myPair<Key, Value>> allPairs;
 
 
 		// exract all key-value pairs
@@ -506,7 +903,7 @@ public:
 		
 	}
 
-	void InsertionSort(DynamicArray<pair<Key, Value>>& vec, bool key=true) const {
+	void InsertionSort(DynamicArray<myPair<Key, Value>>& vec, bool key=true) const {
 		for (size_t i = 1; i < vec.getSize(); i++) {
 			auto current = vec[i];
 			int j = i - 1;
@@ -527,7 +924,7 @@ public:
 		}
 	}
 
-	void iterate(function<void(const string&, uint64_t&)> func) {
+	void iterate(function<void(const String&, uint64_t&)> func) {
 		for (int i = 0; i < TABLE_SIZE; ++i) {
 			for (auto& kv : table[i]) {
 				func(kv.first, kv.second);
@@ -543,7 +940,7 @@ public:
 		size_t totalCount = 0;
 		// Count the total number of key-value pairs
 		for (int i = 0; i < TABLE_SIZE; ++i) {
-			totalCount += table[i].size();
+			totalCount += table[i].getSize();
 		}
 
 		out.write(reinterpret_cast<const char*>(&totalCount), sizeof(totalCount));
@@ -592,7 +989,7 @@ public:
 			size_t keyLength;
 			in.read(reinterpret_cast<char*>(&keyLength), sizeof(keyLength));
 
-			string key(keyLength, '\0');
+			String key(keyLength, '\0');
 			in.read(&key[0], keyLength);
 
 			uint64_t value;
@@ -609,14 +1006,14 @@ public:
 void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& parent, uint64_t newSize);
 class ResourceManager {
 private:
-	string currentOperation;
+	String currentOperation;
 	ifstream inputStream;
 	ofstream outputStream;
 	DynamicArray<uint64_t> freeBlocks;
 	DynamicArray<uint64_t> freeMeta;
-	HashTable<string, uint64_t> blockHashTable;
-	HashTable<string, uint64_t> metadataHashtable;
-	string fileName;
+	HashTable<String, uint64_t> blockHashTable;
+	HashTable<String, uint64_t> metadataHashtable;
+	String fileName;
 	uint64_t currentDirectoryOffset = 0;
 
 	// this is for the fileMeta idenitfier if it has 
@@ -724,7 +1121,7 @@ private:
 	}
 
 public:
-	explicit ResourceManager(const string& file, string& op) : fileName(file) , currentOperation(op){
+	explicit ResourceManager(const String& file, String& op) : fileName(file) , currentOperation(op){
 		if (InitializeContainer()) {
 			return;
 		}
@@ -772,10 +1169,10 @@ public:
 		return freeMeta;
 	}
 
-	HashTable<string, uint64_t>& getBlockHashTable() {
+	HashTable<String, uint64_t>& getBlockHashTable() {
 		return blockHashTable;
 	}
-	HashTable<string, uint64_t>& getMetadataHashTable() {
+	HashTable<String, uint64_t>& getMetadataHashTable() {
 		return metadataHashtable;
 	}
 
@@ -808,7 +1205,7 @@ public:
 			updateInMemoryOffsets(this, oldSize,*root, newSize);
 			// offset now are update but the still is not updated, so ... 
 			root->offset += 1024;
-			string key = root->makeKey();
+			String key = root->makeKey();
 			metadataHashtable.insert(key, root->offset);
 			outputStream.clear();
 			outputStream.seekp(root->offset, ios::beg);
@@ -910,7 +1307,7 @@ struct Block {
 	uint64_t block_offset; // offset of the block metadata
 	long int numberOfFiles = 0;
 	uint64_t size; // size of the block
-	string hashBl;
+	String hashBl;
 	uint32_t checksum; // Resilliency checksum
 
 	void serialize(std::ofstream& out) const {
@@ -924,10 +1321,10 @@ struct Block {
 		out.write(reinterpret_cast<const char*>(&checksum), sizeof(checksum));
 
 		// serialize the hash string
-		size_t hashLength = hashBl.size();
+		size_t hashLength = hashBl.getSize();
 		out.write(reinterpret_cast<const char*>(&hashLength), sizeof(hashLength));
 		//hashBl.data() gives a pointer to the raw character array inside the string.
-		out.write(hashBl.data(), hashLength);
+		out.write(hashBl.getData(), hashLength);
 	}
 	static Block* deserialize(std::ifstream& in) {
 		Block* block = new Block();
@@ -953,7 +1350,7 @@ struct Block {
 		size_t fiexedSize = sizeof(content_offset) + sizeof(block_offset) + sizeof(numberOfFiles)
 			+ sizeof(size) + sizeof(checksum);
 
-		size_t dynamicsize = sizeof(size_t) + hashBl.size();
+		size_t dynamicsize = sizeof(size_t) + hashBl.getSize();
 		return fiexedSize + dynamicsize;
 	}
 	void writeToContainer(std::ofstream& container, const char* buffer, size_t buffersize, uint64_t offset, int nFile=1 ) {
@@ -995,8 +1392,8 @@ struct Block {
 		uint64_t m = container.tellp();
 
 	}
-	string hashBlock(const char* block, size_t size) {
-		string hash;
+	String hashBlock(const char* block, size_t size) {
+		String hash;
 		for (size_t i = 0; i < size; ++i) {
 			hash += to_string((block[i] + i) % 256);
 		}
@@ -1010,25 +1407,25 @@ struct Block {
 
 void InsertionSort(DynamicArray<uint64_t>& array, bool descending = false);
 DynamicArray<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
-void rm(ResourceManager& re, string& fileName, uint64_t actualOffset = -1);
-void InitializeContainer(ResourceManager& re, string& containerPath);
-void ls(ResourceManager& re, string path = "");
+void rm(ResourceManager& re, String& fileName, uint64_t actualOffset = -1);
+void InitializeContainer(ResourceManager& re, String& containerPath);
+void ls(ResourceManager& re, String path = "");
 void printBlockAndContent(ResourceManager& re, uint64_t offset);
 void printMeta(ResourceManager& re, uint64_t offset);
-void cpout(ResourceManager& re, string fileName, const string outputPath);
-bool hasExtention(const string& fileName);
-void cpin(ResourceManager& re, string& sourceName, string& fileName, size_t blockSize);
-void md(ResourceManager& re, string& directoryName);
-void cd(ResourceManager& re, string& directoryName);
+void cpout(ResourceManager& re, String fileName, const String outputPath);
+bool hasExtention(const String& fileName);
+void cpin(ResourceManager& re, String& sourceName, String& fileName, size_t blockSize);
+void md(ResourceManager& re, String& directoryName);
+void cd(ResourceManager& re, String& directoryName);
 void cdDots(ResourceManager& re);
 void cdRoot(ResourceManager& re);
 void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite, Metadata* currentMeta);
-void rd(ResourceManager& re, string& dirName);
-bool checkNames(ifstream& container, uint64_t parent_offset, string dirName);
+void rd(ResourceManager& re, String& dirName);
+bool checkNames(ifstream& container, uint64_t parent_offset, String dirName);
 uint64_t getMetadataOff(ResourceManager& re, ofstream& contianerWrite, ifstream& containerRead, Metadata& fileMeta);
 
-DynamicArray<string> split(const char* str, char delimeter) {
-	DynamicArray<string> res;
+DynamicArray<String> split(const char* str, char delimeter) {
+	DynamicArray<String> res;
 
 
 	const char* start = str; // Pointer to the beginning of the substring
@@ -1054,7 +1451,7 @@ DynamicArray<string> split(const char* str, char delimeter) {
 
 }
 
-void getBlockOffsets(ResourceManager& re,Metadata& childMeta, HashTable<uint64_t, StructType>& for_upgrading, uint64_t base_offset, HashTable<string, uint64_t>& dp) {
+void getBlockOffsets(ResourceManager& re,Metadata& childMeta, HashTable<uint64_t, StructType>& for_upgrading, uint64_t base_offset, HashTable<String, uint64_t>& dp) {
 	for (auto& key : childMeta.keys) {
 		uint64_t off = re.getBlockHashTable().get(key);
 		if (base_offset > off || dp.exists(key)) {
@@ -1068,9 +1465,9 @@ void getBlockOffsets(ResourceManager& re,Metadata& childMeta, HashTable<uint64_t
 
 
 // the plan is this - we go through every dir and ile and put them in a vector of offsets
-void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<string, uint64_t>& dp, uint64_t base_offset, HashTable<uint64_t, StructType>& for_upgrading, int64_t sizeDifference) {
+void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<String, uint64_t>& dp, uint64_t base_offset, HashTable<uint64_t, StructType>& for_upgrading, int64_t sizeDifference) {
 
-	string key = parent.makeKey();
+	String key = parent.makeKey();
 	// check if the value for this parent is already computed 
 	if (dp.exists(key)) {
 		return;
@@ -1107,7 +1504,7 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 		int64_t sizeDifference = newSize - oldSize;
 
 		// here we need to implement deph first seach
-		HashTable<string, uint64_t> dp;
+		HashTable<String, uint64_t> dp;
 		// offsets that we need to loop deserialize change them and serialize again (first we need to sor them)
 		HashTable<uint64_t, StructType> hash_offsets;
 
@@ -1118,7 +1515,7 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 
 		// Update offsets in the hashtable
 		dfs(*re,re->getInputStream(),parent,dp,parent.offset, hash_offsets,sizeDifference);
-		DynamicArray<pair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
+		DynamicArray<myPair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
 
 		ofstream& contasinerWrite = re->getOutputStream();
 		ifstream& containerRead = re->getInputStream();
@@ -1151,14 +1548,14 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 		}
 
 		auto& metaHaSh = re->getMetadataHashTable();
-		metaHaSh.iterate([&](const string& key, uint64_t& of) {
+		metaHaSh.iterate([&](const String& key, uint64_t& of) {
 			if (parent.offset < of) {
 				of += sizeDifference; // Shift subsequent offsets
 			}
 		});
 
 		auto& hashtable = re->getBlockHashTable();
-		hashtable.iterate([&](const string& key, uint64_t& of) {
+		hashtable.iterate([&](const String& key, uint64_t& of) {
 			if (parent.offset < of) {
 				of += sizeDifference; // Shift subsequent offsets
 			}
@@ -1188,14 +1585,14 @@ int main(int argc, char* argv[]) {
 		std::cerr << "Ussage: <command> [arguments]\n";
 		return 1;
 	}*/
-	string fileSystem = "container.bin";
+	String fileSystem = "container.bin";
 
 
-	string newDir = "Ehee\\Ahaa\\Muhaaga\\Ehee1";
-	string outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	string fileName = "a111.txt";
+	String newDir = "Ehee\\Ahaa\\Muhaaga\\Ehee1";
+	String outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
+	String fileName = "aha1.txt";
 
-	string command = "cpin";
+	String command = "cpin";
 	if (command == "md") {
 		ResourceManager resource(fileSystem, command);
 
@@ -1288,7 +1685,7 @@ DynamicArray<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requ
 
 }
 
-uint64_t getOffsetByParent(ifstream& container,uint64_t parent_offset, string fileName) {
+uint64_t getOffsetByParent(ifstream& container,uint64_t parent_offset, String fileName) {
 	container.clear();
 	container.seekg(parent_offset, ios::beg);
 	Metadata* parent = Metadata::deserialize(container);
@@ -1296,7 +1693,7 @@ uint64_t getOffsetByParent(ifstream& container,uint64_t parent_offset, string fi
 		container.clear();
 		container.seekg(child_off, ios::beg);
 		Metadata* child = Metadata::deserialize(container);
-		if (string(child->name) == fileName) {
+		if (String(child->name) == fileName) {
 			delete parent;	
 			uint64_t off = child->offset;
 			delete child;
@@ -1310,14 +1707,14 @@ uint64_t getOffsetByParent(ifstream& container,uint64_t parent_offset, string fi
 }
 
 
-void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
+void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 	ifstream& containerRead = re.getInputStream();
 	ofstream& containerWrite = re.getOutputStream();
 
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<string> directories = split(fileName.c_str(), '\\');
+	DynamicArray<String> directories = split(fileName.c_str(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t child_offset = re.getCurrentDirOffset();
 	uint64_t parent_offset;
@@ -1412,7 +1809,7 @@ void rm(ResourceManager& re , string& fileName, uint64_t actualOffset) {
 	// but what if the actual block is being used by others, we wont delete it and we wont add it to the freeblocks 
 	// to check if other files are using the block we need to have a variable for each block and the number of files that are using that block
 	// delete all blocks assosiated with the meta file 
-	for (string key: child->keys) {
+	for (String key: child->keys) {
 		// firstly add all the blocks to a list of reusable blocks
 		uint64_t off = re.getBlockHashTable().get(key);
 		containerRead.clear();
@@ -1473,11 +1870,11 @@ uint64_t getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& 
 	return metaOff;
 }
 
-void ls(ResourceManager& re, string path) {
+void ls(ResourceManager& re, String path) {
 	ifstream& containerRead = re.getInputStream();
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
-	DynamicArray<string> directories = split(path.c_str(), '\\');
+	DynamicArray<String> directories = split(path.c_str(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (!directories.empty() && !hasExtention(directories.back())) {
@@ -1609,12 +2006,12 @@ void printMeta(ResourceManager& re, uint64_t offset) {
 }
 
 // TASK: WHEN A  FILE GET DELETED EVERY BLOCK HAS ITS OWN BLOCK META, SO I NEED TO CONSIDER THIS 
-void cpout(ResourceManager& re,  string fileName, const string outputPath) {
+void cpout(ResourceManager& re, String fileName, const String outputPath) {
 	ifstream& containerRead = re.getInputStream();
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<string> directories = split(fileName.c_str(), '\\');
+	DynamicArray<String> directories = split(fileName.c_str(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (directories.getSize() > 1 && hasExtention(directories.back())) {
@@ -1724,7 +2121,7 @@ void cpout(ResourceManager& re,  string fileName, const string outputPath) {
 
 }
 
-bool hasExtention(const string& fileName) {
+bool hasExtention(const String& fileName) {
 	// Initialize variables to track the position of the last dot
 	int dotPosition = -1;
 	int length = 0;
@@ -1743,7 +2140,7 @@ bool hasExtention(const string& fileName) {
 	return (dotPosition != -1 && dotPosition != 0 && dotPosition != length - 1);
 }
 
-void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t blockSize) {
+void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blockSize) {
 	std::ifstream src(sourceName, std::ios::binary); // opens the file in binary mode , file is read byte by byte
 	if (!src) {
 		std::cerr << "Error: Cannot open source file. \n";
@@ -1753,7 +2150,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<string> directories = split(fileName.c_str(), '\\');
+	DynamicArray<String> directories = split(fileName.c_str(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	if (directories.getSize() > 1 && hasExtention(directories.back())) {
@@ -1846,7 +2243,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 	
 	// SERIALIZE THE FILEMETA
 	fileMeta.offset = metaOff;
-	string key1 = fileMeta.makeKey();
+	String key1 = fileMeta.makeKey();
 	re.getMetadataHashTable().insert(key1, fileMeta.offset);
 	containerWrite.clear();
 	containerWrite.seekp(metaOff, ios::beg);
@@ -1864,7 +2261,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 		updateInMemoryOffsets(&re, oldsize, *parent, parent->getSerializedSize());
 		fileMeta.offset = re.getMetadataHashTable().get(key1);
 	}
-	parent->max_capacity += sizeof(uint64_t);
+	parent->max_capacity +=1;
 
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
@@ -1978,7 +2375,7 @@ void cpin(ResourceManager& re , string& sourceName,string& fileName, size_t bloc
 }
 
 // this function checks in the parent folder if there are other files or directories with the same name as the one that we want to create 
-bool checkNames(ifstream& container,uint64_t parent_offset, string dirName) {
+bool checkNames(ifstream& container,uint64_t parent_offset, String dirName) {
 	// First deserialize the parent
 	container.clear();
 	container.seekg(parent_offset, ios::beg);
@@ -1988,7 +2385,7 @@ bool checkNames(ifstream& container,uint64_t parent_offset, string dirName) {
 		container.clear();
 		container.seekg(child_offset);
 		Metadata* child = Metadata::deserialize(container);
-		if (string(child->name) == dirName) {
+		if (String(child->name) == dirName) {
 			cerr << "There is a file with the same name in the directory please choose a different name!\n";
 			delete parent;
 			delete child;
@@ -2002,12 +2399,12 @@ bool checkNames(ifstream& container,uint64_t parent_offset, string dirName) {
 
 // when making a directory we have two options: 1. it is a single directory to make in the current dir (the same as cpin but whithout the extetion check (because its dir)) 
 // 12/16 - works perfectly
-void md(ResourceManager& re, string& directoryName) {
+void md(ResourceManager& re, String& directoryName) {
 	ifstream& container = re.getInputStream();
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<string> directories = split(directoryName.c_str(), '\\');
+	DynamicArray<String> directories = split(directoryName.c_str(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	container.clear();
@@ -2083,7 +2480,7 @@ void md(ResourceManager& re, string& directoryName) {
 
 	// SERIALIZE THE FILEMETA
 	newDirMeta->offset = metaOff;
-	string key1 = newDirMeta->makeKey();
+	String key1 = newDirMeta->makeKey();
 	re.getMetadataHashTable().insert(key1, newDirMeta->offset);
 	containerWrite.clear();
 	containerWrite.seekp(metaOff, ios::beg);
@@ -2097,7 +2494,7 @@ void md(ResourceManager& re, string& directoryName) {
 		updateInMemoryOffsets(&re, oldsize, *parentMeta, parentMeta->getSerializedSize());
 		newDirMeta->offset = re.getMetadataHashTable().get(key1);
 	}
-	parentMeta->max_capacity += sizeof(uint64_t);
+	parentMeta->max_capacity +=1;
 
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
@@ -2108,12 +2505,12 @@ void md(ResourceManager& re, string& directoryName) {
 }
 
 // 2 options - cd Home\user\soemwhere or cd Home
-void cd(ResourceManager& re, string& directoryName) {
+void cd(ResourceManager& re, String& directoryName) {
 	ifstream& container = re.getInputStream();
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<string> directories = split(directoryName.c_str(), '\\');
+	DynamicArray<String> directories = split(directoryName.c_str(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	container.clear();
@@ -2220,7 +2617,7 @@ void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& container
 			currentFile->serialize(containerWrite);
 		}
 		else {
-			string name(currentFile->name);
+			String name(currentFile->name);
 			rm(re, name, currentFile->offset);
 		}
 		delete currentFile;
@@ -2229,13 +2626,13 @@ void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& container
 }
 
 // 2 options rd Folderaa or rd Home\Folderaaa
-void rd(ResourceManager& re, string& dirName) {
+void rd(ResourceManager& re, String& dirName) {
 	ifstream& containerRead = re.getInputStream();
 	ofstream& containerWrite = re.getOutputStream();
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<string> directories = split(dirName.c_str(), '\\');
+	DynamicArray<String> directories = split(dirName.c_str(), '\\');
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	// after all of this i need to get the acutal last dir
