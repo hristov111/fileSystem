@@ -65,7 +65,6 @@ private:
 
 public:
 	DynamicArray(size_t inititalCapacity=10) : capacity(inititalCapacity), size(0) {
-		cout << "Constructor called";
 		data = new T[capacity];
 		for (size_t i = size; i < capacity; ++i) {
 			data[i] = T();
@@ -94,7 +93,6 @@ public:
 	}
 
 	~DynamicArray() {
-		cout << "Destructor called\n";
 		delete[] data;
 	}
 
@@ -592,16 +590,12 @@ public:
 	}
 
 	String(const String& other) {
-		std::cout << "Copy constructor called for String: " << other.data << std::endl;
-
 		length = other.length;
 		data = new char[length + 1]; // allocate memory for the new string
 		custom_strcpy(data, other.data); // copy the string
 	}
 
 	String(String&& other) noexcept : data(other.data), length(other.length) {
-		std::cout << "Move constructor called for String: " << (other.data ? other.data : "null") << std::endl;
-
 		other.data = nullptr;
 		other.length = 0;
 	}
@@ -675,14 +669,14 @@ public:
 			buffer[index++] = '0' + (value % 10); // get the last digit as a character
 			value /= 10;
 		}
-
 		// add negative sign
 		if (isNegative) {
 			buffer[index++] = '-';
 		}
+		buffer[index++] = '\0';
 
 		// reverse the order to get the correct
-		for (int i = 0, j = index - 1; i < j; ++i, --j) {
+		for (int i = 0, j = index - 2; i < j; ++i, --j) {
 			char temp = buffer[i];
 			buffer[i] = buffer[j];
 			buffer[j] = temp;
@@ -693,13 +687,20 @@ public:
 		return !(*this == other);
 	}
 	String& operator+=(const String& other) {
+		if (other.length == 0) {
+			return *this;
+		}
+
+
 		size_t newLenght = length + other.length;
 		char* newData = new char[newLenght + 1];
 
 
 		// copy current data
-		for (size_t i = 0; i < length; ++i) {
-			newData[i] = data[i];
+		if (data) {
+			for (size_t i = 0; i < length; ++i) {
+				newData[i] = data[i];
+			}
 		}
 		// append other data
 		for (size_t i = 0; i < other.length; ++i) {
@@ -836,7 +837,7 @@ public:
 		}
 		size_t i = 0;
 		while (src[i] != '\0') {
-			dest[dest_len + 1] = src[i];
+			dest[dest_len + i] = src[i];
 			++i;
 		}
 
@@ -981,7 +982,6 @@ public:
 	}
 
 	~String() {
-		std::cout << "Destructor called for String: " << (data ? data : "null") << std::endl;
 		delete[] data;
 	}
 };
@@ -1111,7 +1111,6 @@ struct Metadata {
 				in.read(reinterpret_cast<char*>(&metadata->children[i]), sizeof(metadata->children[i]));
 			}
 		}
-	
 
 
 		return metadata;
@@ -1531,6 +1530,14 @@ public:
 		return metadataHashtable;
 	}
 
+	void updateFilesInRoot() {
+		inputStream.clear();
+		inputStream.seekg(root_offset, ios::beg);
+		Metadata* root = Metadata::deserialize(inputStream);
+		for (auto& child_offset : root->children) {
+
+		}
+	}
 	
 	// if ls - 0, the same as the last time
 	// if its cpin - we need the last offset like the last time
@@ -1555,11 +1562,37 @@ public:
 			inputStream.clear();
 			inputStream.seekg(root_offset, ios::beg);
 			Metadata* root = Metadata::deserialize(inputStream);
-			uint64_t oldSize = 1024;
-			uint64_t newSize = 2056;
-			updateInMemoryOffsets(this, oldSize,*root, newSize);
+			size_t updated_size; 
+			size_t old_size;
+			if (vec1CurrSize > vec1AllocatedSize) {
+				updated_size = vec1CurrSize * 2;
+				old_size = vec1AllocatedSize;
+				updateInMemoryOffsets(this, vec1AllocatedSize, *root, vec1CurrSize*2);
+			}
+			if (vec2CurrSize > vec2AllocatedSize) {
+				updated_size = vec2CurrSize * 2;
+				old_size = vec2AllocatedSize;
+
+				updateInMemoryOffsets(this, vec2AllocatedSize, *root, vec2CurrSize * 2);
+			}
+			if (hashtable1 > hash1AllocatedSize) {
+				updated_size = hashtable1 * 2;
+				old_size = hash1AllocatedSize;
+
+				updateInMemoryOffsets(this, hash1AllocatedSize, *root, hashtable1 * 2);
+			}
+			if (hashtable2 > hash2AllocatedSize) {
+				updated_size = hashtable2 * 2;
+				old_size = hash2AllocatedSize;
+
+				updateInMemoryOffsets(this, hash2AllocatedSize, *root, hashtable2 * 2);
+			}
 			// offset now are update but the still is not updated, so ... 
-			root->offset += 1024;
+			// we need to also update root as a parent offset of every file in the root dir
+
+			size_t difference = updated_size - old_size;
+			root->offset += difference;
+			root_offset = root->offset;
 			String key = root->makeKey();
 			metadataHashtable.insert(key, root->offset);
 			outputStream.clear();
@@ -1567,51 +1600,50 @@ public:
 			root->serialize(outputStream);
 
 			// Now after we serialize the root we need to fix the vec and hashtableso
-			DynamicArray<uint64_t> offsets_for_upgrading;
-			uint64_t offset;
 			// we need to get firstly the overlapping struct
 			if (vec1CurrSize > vec1AllocatedSize) {
-				hash2Offset += 1024;
+				hash2Offset += difference;
 				outputStream.clear();
 				outputStream.seekp(hash2Offset, ios::beg);
 				metadataHashtable.serialize(outputStream);
 				
-				hash1Offset += 1024;
+				hash1Offset += difference;
 				outputStream.clear();
 				outputStream.seekp(hash1Offset, ios::beg);
 				blockHashTable.serialize(outputStream);
 
-				vec2Offset+= 1024;
+				vec2Offset+= difference;
 				outputStream.clear();
 				outputStream.seekp(vec2Offset, ios::beg);
 				serializeVector(freeMeta, outputStream);
-				vec1AllocatedSize += 1024;
+
+				vec1AllocatedSize = updated_size;
 			}
 
-			else if (vec2CurrSize > vec2AllocatedSize) {
-				hash2Offset += 1024;
+			if (vec2CurrSize > vec2AllocatedSize) {
+				hash2Offset += difference;
 				outputStream.clear();
 				outputStream.seekp(hash2Offset, ios::beg);
 				metadataHashtable.serialize(outputStream);
 				
-				hash1Offset += 1024;
+				hash1Offset += difference;
 				outputStream.clear();
 				outputStream.seekp(hash1Offset, ios::beg);
 				blockHashTable.serialize(outputStream);
 
-				vec2AllocatedSize += 1024;
+				vec2AllocatedSize = updated_size;
 			}
-			else if (hashtable1 > hash1AllocatedSize) {
-				hash2Offset += 1024;
+			if (hashtable1 > hash1AllocatedSize) {
+				hash2Offset += difference;
 				outputStream.clear();
 				outputStream.seekp(hash2Offset, ios::beg);
 				metadataHashtable.serialize(outputStream);
 
-				hash1AllocatedSize += 1024;
+				hash1AllocatedSize = updated_size;
 			}
-			else if (hashtable2 > hash2AllocatedSize) {
+			if (hashtable2 > hash2AllocatedSize) {
 				// update only the size of the hash2AllocatedSize
-				hash2AllocatedSize += 1024;
+				hash2AllocatedSize += updated_size;
 			}
 
 			
@@ -1769,8 +1801,8 @@ void printBlockAndContent(ResourceManager& re, uint64_t offset);
 void printMeta(ResourceManager& re, uint64_t offset);
 void cpout(ResourceManager& re, String fileName, const String outputPath);
 bool hasExtention(const String& fileName);
-void cpin(ResourceManager& re, String& sourceName, String& fileName, size_t blockSize);
-void md(ResourceManager& re, String& directoryName);
+String& cpin(ResourceManager& re, String& sourceName, String& fileName, size_t blockSize);
+String& md(ResourceManager& re, String& directoryName);
 void cd(ResourceManager& re, String& directoryName);
 void cdDots(ResourceManager& re);
 void cdRoot(ResourceManager& re);
@@ -1841,10 +1873,20 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 		for_upgrading.insert(child_offset,METADATA);
 		containerRead.clear();
 		containerRead.seekg(child_offset, ios::beg);
-		Metadata* childMeta = Metadata::deserialize(containerRead);
+		Metadata* childMeta = Metadata::deserialize(containerRead); // 4436
+		// here we update parent offset of files in subsequent folders (this means that we recursively went into another dir and we need to update file parent offset in that dir)
+		if (base_offset != parent.offset) {
+			childMeta->parent += sizeDifference;
+			re.getOutputStream().clear();
+			re.getOutputStream().seekp(child_offset, ios::beg);
+			childMeta->serialize(re.getOutputStream());
+		}
 		child_offset += sizeDifference;
 		if (childMeta->isDirectory) {
 			dfs(re,containerRead, *childMeta, dp, base_offset, for_upgrading,sizeDifference);
+			re.getOutputStream().clear();
+			re.getOutputStream().seekp(childMeta->offset, ios::beg);
+			childMeta->serialize(re.getOutputStream());
 		}
 		else { // the file is not directory and we need to fix block offset and content offsets
 			getBlockOffsets(re, *childMeta, for_upgrading, base_offset, dp);
@@ -1943,55 +1985,54 @@ int main(int argc, char* argv[]) {
 	String fileSystem = "container.bin";
 
 
-	String newDir = "Ehee\\Ahaa\\Muhaaga\\Ehee1";
-	String outfile = "C:\\Users\\vboxuser\\Desktop\\aaa.txt";
-	String fileName = "eeeea1.txt";
+	String newDir = "Ehee\\Alooo\\Ballooo\\Eheafasf";
+	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
+	String fileName = "a1212.txt";
+	String currentState = "root\\";
+	while (true) {
+		String command = "cpin";
+		cout << currentState << endl;;
+		if (command == "md") {
+			ResourceManager resource(fileSystem, command);
 
-	String command = "cpin";
-	if (command == "md") {
-		ResourceManager resource(fileSystem, command);
+			cout <<md(resource, newDir);
+		}
+		else if (command == "cpin") {
+			ResourceManager resource(fileSystem, command);
+			cpin(resource, outfile, fileName, 4096);
+			break;
+		}
+		else if (command == "ls") {
+			ResourceManager resource(fileSystem, command);
 
-		md(resource, newDir);
-	}
-	else if (command == "cpin") {
-		ResourceManager resource(fileSystem, command);
-		cpin(resource,outfile, fileName, 4096);
-	}
-	else if (command == "ls") {
-		ResourceManager resource(fileSystem, command);
+			ls(resource, newDir);
+		}
+		else if (command == "cpout") {
+			ResourceManager resource(fileSystem, command);
 
-		ls(resource, newDir);
-	}
-	else if (command == "cpout") {
-		ResourceManager resource(fileSystem, command);
+			cpout(resource, newDir, "C:\\Users\\vboxuser\\Desktop\\eheeee.txt");
+		}
+		else if (command == "rm") {
+			ResourceManager resource(fileSystem, command);
 
-		cpout(resource,newDir,"C:\\Users\\vboxuser\\Desktop\\eheeee.txt");
-	}
-	else if (command == "rm") {
-		ResourceManager resource(fileSystem, command);
+			rm(resource, newDir);
+		}
+		else if (command == "cd") {
+			ResourceManager resource(fileSystem, command);
 
-		rm(resource, newDir);
-	}
-	else if (command == "cd") {
-		ResourceManager resource(fileSystem, command);
+			cd(resource, newDir);
+		}
+		else if (command == "rd") {
+			ResourceManager resource(fileSystem, command);
 
-		cd(resource,newDir);
+			rd(resource, newDir);
+		}
+		else {
+			std::cerr << "Error: Unknown command '" << command << "'\n";
+		}
 	}
-	else if (command == "rd") {
-		ResourceManager resource(fileSystem, command);
 
-		rd(resource, newDir);
-	}
-	else {
-		std::cerr << "Error: Unknown command '" << command << "'\n";
-		return 1;
-	}
-	//else if (command == "ls") {
-	//	ls();
-	//}
-	//else if (command == "rm") {
-	//	deleteFile("bbb.txt");
-	//}
+	
 
 	return 0;
 }
@@ -2495,11 +2536,12 @@ bool hasExtention(const String& fileName) {
 	return (dotPosition != -1 && dotPosition != 0 && dotPosition != length - 1);
 }
 
-void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blockSize) {
+String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blockSize) {
 	std::ifstream src(sourceName, std::ios::binary); // opens the file in binary mode , file is read byte by byte
+	String errorMessage("");
 	if (!src) {
-		std::cerr << "Error: Cannot open source file. \n";
-		return;
+		
+		return errorMessage += "Error: Cannot open file contianer!";
 	}
 	ifstream& containerRead = re.getInputStream();
 	Metadata* parentMeta = nullptr;
@@ -2517,13 +2559,13 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 				cerr << "Error: path doesnt exits\n";
 				delete parentMeta;
 				delete childMeta;
-				return;
+				return errorMessage;
 			}
 			 
 			if (directories.back() == dir) {
 				// check if there is a file with the same name in the last dir
 				if (!checkNames(containerRead, parent_offset, dir)) {
-					return;
+					return errorMessage;
 				}
 				break;
 			}
@@ -2531,7 +2573,7 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 			offset = getOffsetByParent(containerRead, parent_offset, dir);
 			if (offset == -1) {
 				cerr << "The file doesnt exist in that folder!\n";
-				return;
+				return errorMessage;
 			}
 			containerRead.clear();
 			containerRead.seekg(offset, ios::beg);
@@ -2548,7 +2590,7 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 					cerr << "Error: " << dir << " is not a valid child of its parent\n";
 					delete parentMeta;
 					delete childMeta;
-					return;
+					return errorMessage;
 
 				}
 			}
@@ -2567,7 +2609,7 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 		parent_offset = re.getCurrentDirOffset(); 
 	}
 	else {
-		return;
+		return errorMessage;
 	}
 	
 
@@ -2619,6 +2661,8 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
 	parent->serialize(containerWrite);
+
+
 
 
 
@@ -2720,7 +2764,7 @@ void cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blo
 		parent = Metadata::deserialize(containerRead);
 	}
 	// Write metadata to the container 
-	cout << "File copied to container.\n";
+	return errorMessage;
 }
 
 // this function checks in the parent folder if there are other files or directories with the same name as the one that we want to create 
@@ -2733,7 +2777,7 @@ bool checkNames(ifstream& container,uint64_t parent_offset, String dirName) {
 	for (const auto& child_offset : parent->children) {
 		container.clear();
 		container.seekg(child_offset);
-		Metadata* child = Metadata::deserialize(container);
+		Metadata* child = Metadata::deserialize(container);// 4690
 		if (String(child->name) == dirName) {
 			cerr << "There is a file with the same name in the directory please choose a different name!\n";
 			delete parent;
@@ -2748,7 +2792,8 @@ bool checkNames(ifstream& container,uint64_t parent_offset, String dirName) {
 
 // when making a directory we have two options: 1. it is a single directory to make in the current dir (the same as cpin but whithout the extetion check (because its dir)) 
 // 12/16 - works perfectly
-void md(ResourceManager& re, String& directoryName) {
+String& md(ResourceManager& re, String& directoryName) {
+	String errorMessage("");
 	ifstream& container = re.getInputStream();
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
@@ -2760,16 +2805,15 @@ void md(ResourceManager& re, String& directoryName) {
 	if (directories.getSize() > 1 && !hasExtention(directories.back())) {
 		for (const auto& dir : directories) {
 			// we need to check also if the dir is some of the first because the last doesnt exist;
-			if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {
-				cerr << "Error: path doesnt exits\n";
+			if (!re.getMetadataHashTable().findByBaseName(dir) && directories.back() != dir) {				
 				delete parentMeta;
 				delete childMeta;
-				return;
+				return errorMessage += "Path doesn't exist!";
 			}
 			if (directories.back() == dir) {
 				// check if there is a file with the same name in the last dir
 				if (!checkNames(container, parent_offset, dir)) {
-					return;
+					return errorMessage += "There is a file or directory with the same name!";
 				}
 				break;
 			}
@@ -2786,10 +2830,9 @@ void md(ResourceManager& re, String& directoryName) {
 					}
 				}
 				if (!isPart) {
-					cerr << "Error: " << dir << " is not a valid child of its parent\n";
 					delete parentMeta;
 					delete childMeta;
-					return;
+					return errorMessage += "Path is invalid!";
 
 				}
 			}
@@ -2806,7 +2849,7 @@ void md(ResourceManager& re, String& directoryName) {
 		parent_offset = re.getCurrentDirOffset();
 	}
 	else {
-		return;
+		return errorMessage;
 	}
 	ofstream& containerWrite = re.getOutputStream();
 	containerWrite.clear();
@@ -2848,9 +2891,7 @@ void md(ResourceManager& re, String& directoryName) {
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
 	parentMeta->serialize(containerWrite);
-
-	cout << "Directory " << directoryName << " created successfully\n";
-	printMeta(re, newDirMeta->offset);
+	return directoryName;
 }
 
 // 2 options - cd Home\user\soemwhere or cd Home
