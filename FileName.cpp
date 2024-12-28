@@ -148,12 +148,17 @@ public:
 	}
 
 	void clear() {
-		for (int i = 0; i < size; ++i) {
-			data[i].~T(); // Call destructor for non-trivial types
+		if (constexpr (!std::is_trivially_destructible<T>::value)) {
+			for (int i = 0; i < size; ++i) {
+				data[i].~T(); // Call destructor for non-trivial types
+			}
 		}
-		size = 0;
 		delete[] data;
-		capacity = 4;
+
+
+
+		size = 0;
+		capacity = 10;
 		data = new T[capacity];
 	}
 
@@ -1371,12 +1376,12 @@ private:
 	uint64_t currentDirectoryOffset = 0;
 
 	// this is for the fileMeta idenitfier if it has 
-	uint64_t root_offset = 0;
+	uint64_t root_offset;
 	size_t id = 0;
-	uint64_t vec1Offset = 8;
-	uint64_t vec2Offset = 1032;
-	uint64_t hash1Offset = 2056;
-	uint64_t hash2Offset = 3080;
+	uint64_t vec1Offset;
+	uint64_t vec2Offset;
+	uint64_t hash1Offset;
+	uint64_t hash2Offset;
 	size_t vec1AllocatedSize = 1024; // Initially allocated size
 	size_t vec2AllocatedSize = 1024;
 	size_t hash1AllocatedSize = 1024;
@@ -1440,6 +1445,19 @@ private:
 		if (!container) {
 			throw runtime_error("Error: Cannot create container file");
 		}
+		// first we write the id and all the other offsets and stuff
+		outputStream.clear();
+		outputStream.seekp(0, ios::beg);
+		size_t placeHolder = 0;
+		for (int i = 0; i < 9; ++i) {
+			outputStream.write(reinterpret_cast<const char*>(&placeHolder), sizeof(placeHolder));
+
+		}
+		vec1Offset = 9 * 8; // 9 placeholders * 8 bytes
+		vec2Offset = vec1Offset + 1024;
+		hash1Offset = vec2Offset + 1024;
+		hash2Offset = hash1Offset + 1024;
+		root_offset = hash2Offset + 1024;
 		// we first write the offsets for the vectors and hashtables because they wont change in size
 		// Create the root directory metadata
 		Metadata rootDir;
@@ -1451,13 +1469,10 @@ private:
 		rootDir.id = id;
 		incrementId();
 
-		container.clear();
-		container.seekp(hash2Offset + hash2AllocatedSize, ios::beg);
-		rootDir.offset = container.tellp();
+		rootDir.offset = root_offset;
 		container.clear();
 		container.seekp(rootDir.offset, ios::beg);
 		rootDir.serialize(container);
-		root_offset = rootDir.offset;
 		// Write the root directory metadata to the container
 		metadataHashtable.insert("/", rootDir.offset);
 		currentDirectoryOffset = rootDir.offset;
@@ -1482,6 +1497,20 @@ public:
 		inputStream.clear();
 		inputStream.seekg(0, ios::beg);
 		inputStream.read(reinterpret_cast<char*>(&id), sizeof(id));
+		inputStream.read(reinterpret_cast<char*>(&vec1Offset), sizeof(vec1Offset));
+
+		inputStream.read(reinterpret_cast<char*>(&vec2Offset), sizeof(vec2Offset));
+
+		inputStream.read(reinterpret_cast<char*>(&hash1Offset), sizeof(hash1Offset));
+
+		inputStream.read(reinterpret_cast<char*>(&hash2Offset), sizeof(hash2Offset));
+
+		inputStream.read(reinterpret_cast<char*>(&vec1AllocatedSize), sizeof(vec1AllocatedSize));
+
+		inputStream.read(reinterpret_cast<char*>(&vec2AllocatedSize), sizeof(vec2AllocatedSize));
+		inputStream.read(reinterpret_cast<char*>(&hash1AllocatedSize), sizeof(hash1AllocatedSize));
+
+		inputStream.read(reinterpret_cast<char*>(&hash2AllocatedSize), sizeof(hash2AllocatedSize));
 
 		// in order to go to that offset we need to deserialize the root calculate the offset dynamically and then
 
@@ -1493,14 +1522,17 @@ public:
 		inputStream.seekg(vec2Offset, ios::beg);
 
 		inputStream.clear();
+		inputStream.seekg(vec2Offset, ios::beg);
+
 		freeMeta = deserializeVector(inputStream);
+
+		inputStream.clear();
 		inputStream.seekg(hash1Offset, ios::beg);
-
-		inputStream.clear();
 		blockHashTable.deserialize(inputStream);
-		inputStream.seekg(hash2Offset, ios::beg);
+
 
 		inputStream.clear();
+		inputStream.seekg(hash2Offset, ios::beg);
 		metadataHashtable.deserialize(inputStream);
 
 		currentDirectoryOffset = metadataHashtable.get("/");
@@ -1535,17 +1567,26 @@ public:
 		inputStream.seekg(root_offset, ios::beg);
 		Metadata* root = Metadata::deserialize(inputStream);
 		for (auto& child_offset : root->children) {
-
+			inputStream.clear();
+			inputStream.seekg(child_offset, ios::beg);
+			Metadata* child = Metadata::deserialize(inputStream);
+			child->parent = root->offset;
+			outputStream.clear();
+			outputStream.seekp(child_offset, ios::beg);
+			child->serialize(outputStream);
+			delete child;
 		}
+		delete root;
 	}
 	
 	// if ls - 0, the same as the last time
 	// if its cpin - we need the last offset like the last time
 	~ResourceManager() {
 		// Serialize data when the program end
-		outputStream.clear();
-		outputStream.seekp(0, ios::beg);
-		outputStream.write(reinterpret_cast<const char*>(&id), sizeof(id));
+	
+
+
+
 
 		// here i need to allocate new space to the vector and hashtables if their limit arise 
 		// we need to get all the current sizes of vectors and hashtables 
@@ -1593,11 +1634,11 @@ public:
 			size_t difference = updated_size - old_size;
 			root->offset += difference;
 			root_offset = root->offset;
-			String key = root->makeKey();
-			metadataHashtable.insert(key, root->offset);
+			metadataHashtable.insert("/", root->offset);
 			outputStream.clear();
 			outputStream.seekp(root->offset, ios::beg);
 			root->serialize(outputStream);
+			updateFilesInRoot();
 
 			// Now after we serialize the root we need to fix the vec and hashtableso
 			// we need to get firstly the overlapping struct
@@ -1646,15 +1687,27 @@ public:
 				hash2AllocatedSize += updated_size;
 			}
 
-			
-
-
-
+		
 
 		}
 
+		outputStream.clear();
+		outputStream.seekp(0, ios::beg);
+		outputStream.write(reinterpret_cast<const char*>(&id), sizeof(id));
+		outputStream.write(reinterpret_cast<const char*>(&vec1Offset), sizeof(vec1Offset));
 
+		outputStream.write(reinterpret_cast<const char*>(&vec2Offset), sizeof(vec2Offset));
 
+		outputStream.write(reinterpret_cast<const char*>(&hash1Offset), sizeof(hash1Offset));
+
+		outputStream.write(reinterpret_cast<const char*>(&hash2Offset), sizeof(hash2Offset));
+
+		outputStream.write(reinterpret_cast<const char*>(&vec1AllocatedSize), sizeof(vec1AllocatedSize));
+
+		outputStream.write(reinterpret_cast<const char*>(&vec2AllocatedSize), sizeof(vec2AllocatedSize));
+		outputStream.write(reinterpret_cast<const char*>(&hash1AllocatedSize), sizeof(hash1AllocatedSize));
+
+		outputStream.write(reinterpret_cast<const char*>(&hash2AllocatedSize), sizeof(hash2AllocatedSize));
 		// Move to the end of the file
 		//Write vector 1
 		outputStream.clear();
@@ -1985,17 +2038,18 @@ int main(int argc, char* argv[]) {
 	String fileSystem = "container.bin";
 
 
-	String newDir = "Ehee\\Alooo\\Ballooo\\Eheafasf";
+	String newDir = "a1212.txt";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
 	String fileName = "a1212.txt";
 	String currentState = "root\\";
 	while (true) {
-		String command = "cpin";
+		String command = "rm";
 		cout << currentState << endl;;
 		if (command == "md") {
 			ResourceManager resource(fileSystem, command);
 
 			cout <<md(resource, newDir);
+			break;
 		}
 		else if (command == "cpin") {
 			ResourceManager resource(fileSystem, command);
@@ -2006,6 +2060,7 @@ int main(int argc, char* argv[]) {
 			ResourceManager resource(fileSystem, command);
 
 			ls(resource, newDir);
+			break;
 		}
 		else if (command == "cpout") {
 			ResourceManager resource(fileSystem, command);
