@@ -65,6 +65,9 @@ private:
 
 public:
 	DynamicArray(size_t inititalCapacity=10) : capacity(inititalCapacity), size(0) {
+		if (capacity == 0) {
+			capacity = 10;
+		}
 		data = new T[capacity];
 		for (size_t i = size; i < capacity; ++i) {
 			data[i] = T();
@@ -73,7 +76,7 @@ public:
 	}
 	DynamicArray(const DynamicArray& other) : size(other.size), capacity(other.capacity){
 		data = new T[capacity];
-		for (size - t i = 0; i < size; ++i) {
+		for (size_t i = 0; i < size; ++i) {
 			data[i] = other.data[i];
 		}
 	}
@@ -1577,13 +1580,12 @@ public:
 		inputStream.clear();
 
 		inputStream.seekg(vec1Offset,ios::beg);
-		freeBlocks = deserializeVector(inputStream);
-		inputStream.seekg(vec2Offset, ios::beg);
+		freeBlocks = move(deserializeVector(inputStream));
 
 		inputStream.clear();
 		inputStream.seekg(vec2Offset, ios::beg);
 
-		freeMeta = deserializeVector(inputStream);
+		freeMeta = move(deserializeVector(inputStream));
 
 		inputStream.clear();
 		inputStream.seekg(hash1Offset, ios::beg);
@@ -2097,12 +2099,12 @@ int main(int argc, char* argv[]) {
 	String fileSystem = "container.bin";
 
 
-	String newDir = "a1212.txt";
+	String newDir = "";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
-	String fileName = "a1212.txt";
+	String fileName = "Ehee\\mmmm.txt";
 	String currentState = "root\\";
 	while (true) {
-		String command = "rm";
+		String command = "cpin";
 		cout << currentState << endl;
 		if (command == "md") {
 			ResourceManager resource(fileSystem, command);
@@ -2225,7 +2227,7 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<String> directories = split(fileName.getData(), '\\');
+	DynamicArray<String> directories = move(split(fileName.getData(), '\\'));
 	DynamicArray<uint64_t> offsets;
 	uint64_t child_offset = re.getCurrentDirOffset();
 	uint64_t parent_offset;
@@ -2310,13 +2312,12 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 	containerRead.seekg(parent_offset, ios::beg);
 	Metadata* parent = Metadata::deserialize(containerRead);
 	parent->getChildren().remove(parent->getChildren().indexOf(child_offset));
-	parent->size -= child->size;
 
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
 	parent->serialize(containerWrite);
 
-
+	// children 0 , capacity 1
 	// but what if the actual block is being used by others, we wont delete it and we wont add it to the freeblocks 
 	// to check if other files are using the block we need to have a variable for each block and the number of files that are using that block
 	// delete all blocks assosiated with the meta file 
@@ -2355,6 +2356,34 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 	// add it to the free meta file
 	re.getFreeMeta().push_back(child_offset);
 	re.getMetadataHashTable().remove(child->makeKey());
+
+	uint64_t offset = parent_offset;
+	while (true) { // -1 because the parent of the root is -1 by default
+		// update the size of the current meta
+		parent->size -= child->size;
+		containerWrite.clear();
+		containerWrite.seekp(offset, ios::beg);
+		parent->serialize(containerWrite);
+		// take the parent of the current meta
+		offset = parent->parent;
+		// delete current meta
+
+		delete parent;
+		parent = nullptr;
+		// check if the next offset is the root parent which doesnt exist and thats why we break
+		if (offset == -1) break;
+		//deserialize the parent of the current meta
+		containerRead.clear();
+		containerRead.seekg(offset, ios::beg);
+		parent = Metadata::deserialize(containerRead);
+	}
+	delete parent;
+	parent = nullptr;
+	delete child;
+	child = nullptr;
+
+
+
 }
 
 uint64_t getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& containerRead, Metadata& fileMeta) {
@@ -2766,12 +2795,13 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 	cout << "filemeta name is " << as->name << "id is " << as->id << endl;
 
 	uint64_t oldsize = parent->getSerializedSize();
+	// capacity 1 - children - 1
 	parent->getChildren().push_back(fileMeta.offset);
-	if (parent->max_capacity < parent->getChildren().getSize()) {
-		updateInMemoryOffsets(&re, oldsize, *parent, parent->getSerializedSize());
-		fileMeta.offset = re.getMetadataHashTable().get(key1);
-	}
-	parent->max_capacity +=1;
+	
+	updateInMemoryOffsets(&re, oldsize, *parent, parent->getSerializedSize());
+	fileMeta.offset = re.getMetadataHashTable().get(key1);
+
+	// capacity- 2 - children 1
 
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
@@ -2997,11 +3027,11 @@ String& md(ResourceManager& re, String& directoryName) {
 	uint64_t oldsize = parentMeta->getSerializedSize();
 	parentMeta->getChildren().push_back(newDirMeta->offset);
 
-	if (parentMeta->getChildren().getSize() > parentMeta->max_capacity) {
-		updateInMemoryOffsets(&re, oldsize, *parentMeta, parentMeta->getSerializedSize());
-		newDirMeta->offset = re.getMetadataHashTable().get(key1);
-	}
-	parentMeta->max_capacity +=1;
+
+	updateInMemoryOffsets(&re, oldsize, *parentMeta, parentMeta->getSerializedSize());
+	newDirMeta->offset = re.getMetadataHashTable().get(key1);
+	
+
 
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
@@ -3137,7 +3167,7 @@ void rd(ResourceManager& re, String& dirName) {
 	Metadata* parentMeta = nullptr;
 	Metadata* childMeta = nullptr;
 	// Here basically we are checking if the path specified exitsts 
-	DynamicArray<String> directories = split(dirName.getData(), '\\');
+	DynamicArray<String> directories = move(split(dirName.getData(), '\\'));
 	DynamicArray<uint64_t> offsets;
 	uint64_t parent_offset = re.getCurrentDirOffset();
 	// after all of this i need to get the acutal last dir
