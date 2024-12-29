@@ -1662,7 +1662,7 @@ public:
 			// then we need to get all the vecs and hashtables that are after the upgrading one and update it them too - so basically we will double the size - this mean 1024
 			// so firstly we call the function updateInMemoryOffsets
 			inputStream.clear();
-			inputStream.seekg(root_offset, ios::beg);
+			inputStream.seekg(currentDirectoryOffset, ios::beg);
 			Metadata* root = Metadata::deserialize(inputStream);
 			size_t updated_size; 
 			size_t old_size;
@@ -2099,12 +2099,12 @@ int main(int argc, char* argv[]) {
 	String fileSystem = "container.bin";
 
 
-	String newDir = "";
+	String newDir = "Ehee";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
-	String fileName = "Ehee\\mmmm.txt";
+	String fileName = "mmmm.txt";
 	String currentState = "root\\";
 	while (true) {
-		String command = "cpin";
+		String command = "ls";
 		cout << currentState << endl;
 		if (command == "md") {
 			ResourceManager resource(fileSystem, command);
