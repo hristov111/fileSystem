@@ -7,6 +7,45 @@
 #include <type_traits>
 #include <iterator> // For std::iterator
 using namespace std;
+#include <iostream>
+#include <cstdint>
+#include <cstring>
+
+class CRC32 {
+private:
+	static constexpr uint32_t polynomial = 0xEDB88320; // Standard CRC32 polynomial
+	uint32_t crcTable[256]; // Precomputed CRC table
+
+	void generateCRCTable() {
+		for (uint32_t i = 0; i < 256; ++i) {
+			uint32_t crc = i;
+			for (uint32_t j = 0; j < 8; ++j) {
+				if (crc & 1) {
+					crc = (crc >> 1) ^ polynomial;
+				}
+				else {
+					crc >>= 1;
+				}
+			}
+			crcTable[i] = crc;
+		}
+	}
+
+public:
+	CRC32() {
+		generateCRCTable(); // Generate table on construction
+	}
+
+	uint32_t calculate(const char* data, size_t length) {
+		uint32_t crc = 0xFFFFFFFF; // Initial value
+		for (size_t i = 0; i < length; ++i) {
+			uint8_t byte = static_cast<uint8_t>(data[i]);
+			crc = (crc >> 8) ^ crcTable[(crc ^ byte) & 0xFF];
+		}
+		return crc ^ 0xFFFFFFFF; // Final XOR value
+	}
+};
+
 
 template <typename Key, typename Value>
 class myPair {
@@ -1087,8 +1126,9 @@ public:
 	size_t max_capacity = 0; // if the metadata is for directory (this is donna help when we are making rewrites of the container)
 	bool isDirectory; // True if it's a directory
 	uint64_t offset; // offset in the container
-	uint64_t size; // size of the file (0 for directories)
+	uint64_t size; 
 	uint64_t parent; // Parent directory's index in the metadata (0 for root)
+	uint64_t serialized_size;
 	bool isDeleted;
 	void serialize(std::ofstream& out) {
 
@@ -1101,6 +1141,8 @@ public:
 		out.write(reinterpret_cast<const char*>(&size), sizeof(size));
 		out.write(reinterpret_cast<const char*>(&parent), sizeof(parent));
 		out.write(reinterpret_cast<const char*>(&isDeleted), sizeof(isDeleted));
+		out.write(reinterpret_cast<const char*>(&serialized_size), sizeof(serialized_size));
+
 
 
 		// Write= the size of the vector
@@ -1185,7 +1227,7 @@ public:
 
 	uint64_t getSerializedSize() const {
 		uint64_t fixedSize = sizeof(name) + sizeof(id) + sizeof(isDirectory)
-			+ sizeof(isDeleted) + sizeof(size) + sizeof(parent) + sizeof(offset) + sizeof(max_capacity);
+			+ sizeof(isDeleted) + sizeof(size) + sizeof(parent) + sizeof(offset) + sizeof(max_capacity) + sizeof(serialized_size);
 
 		// dynamic size member keys (vector<string>)
 		uint64_t keysSize = sizeof(size_t);
@@ -1844,6 +1886,10 @@ struct Block {
 		block->hashBl.resize(hashLength);
 		in.read(&block->hashBl[0], hashLength);
 
+		if (!validateBlock(in, *block)) {
+			return nullptr;
+		}
+
 		return block;
 
 	}
@@ -1854,18 +1900,24 @@ struct Block {
 		size_t dynamicsize = sizeof(size_t) + hashBl.getSize();
 		return fiexedSize + dynamicsize;
 	}
-	void writeToContainer(std::ofstream& container, const char* buffer, size_t buffersize, uint64_t offset, int nFile=1 ) {
+	uint64_t writeToContainer(std::ofstream& container, const char* buffer, size_t buffersize, uint64_t offset, int nFile=1 ) {
 		block_offset = offset;
 		size = buffersize;
 		numberOfFiles = nFile;
+
+		size_t totalSize = std::max(buffersize, static_cast<size_t>(4096));
+		char paddedBuffer[4096] = { 0 };
+
+		memcpy(paddedBuffer, buffer, buffersize);
+
+
+		// computer checksum (somple XOR checksum)
+		CRC32 crc32;
+		checksum = crc32.calculate(buffer,buffersize);
+
 		container.clear();
 		container.seekp(offset, ios::beg);
 
-		// computer checksum (somple XOR checksum)
-		checksum = 0;
-		for (size_t i = 0; i < buffersize; ++i) {
-			checksum ^= buffer[i];
-		}
 
 		// write the block's data to thec ontainer
 		content_offset = offset +getSerializedSize();
@@ -1873,7 +1925,6 @@ struct Block {
 			throw runtime_error("Error: Failed to seek to block offset");
 		}
 		serialize(container);
-		container.flush();
 		// Write the block's data to the container
 		container.clear();
 		container.seekp(content_offset, ios::beg);
@@ -1890,7 +1941,7 @@ struct Block {
 		}
 		container.clear();
 		container.seekp(0, ios::end);
-		uint64_t m = container.tellp();
+		return container.tellp();
 
 	}
 	String hashBlock(const char* block, size_t size) {
@@ -1899,6 +1950,34 @@ struct Block {
 			hash += String::to_string((block[i] + i) % 256);
 		}
 		return hash;
+	}
+	static bool validateBlock(std::ifstream& container, Block& block) {
+
+		// Step 2: Read the block's content
+		container.clear();
+		container.seekg(block.content_offset, std::ios::beg);
+		if (!container) {
+			throw std::runtime_error("Error: Failed to seek to content offset");
+		}
+
+		char* buffer = new char[block.size];
+		container.read(buffer, block.size);
+		if (!container) {
+			delete[] buffer;
+			throw std::runtime_error("Error: Failed to read block content");
+		}
+
+		// Step 3: Recompute the checksum
+		CRC32 crc32;
+		uint32_t recomputedChecksum = crc32.calculate(buffer, block.size);
+
+		// Step 4: Validate checksum
+		bool isValid = (recomputedChecksum == block.checksum);
+
+		// Clean up
+		delete[] buffer;
+
+		return isValid;
 	}
 
 	~Block(){}
@@ -2099,9 +2178,9 @@ int main(int argc, char* argv[]) {
 	String fileSystem = "container.bin";
 
 
-	String newDir = "Ehee";
+	String newDir = "";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
-	String fileName = "mmmm.txt";
+	String fileName = "Ehee\\mmmm.txt";
 	String currentState = "root\\";
 	while (true) {
 		String command = "ls";
@@ -2143,6 +2222,7 @@ int main(int argc, char* argv[]) {
 			ResourceManager resource(fileSystem, command);
 
 			rd(resource, newDir);
+			break;
 		}
 		else {
 			std::cerr << "Error: Unknown command '" << command << "'\n";
@@ -2830,11 +2910,7 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 		containerRead.seekg(0, ios::end);
 		uint64_t currentOffset = containerRead.tellg();
 
-		// Allocate new blocks at the end of the container
-		for (size_t i = 0; i < requiredBlocks; ++i) {
-			allocatedBlocks.push_back(currentOffset);
-			currentOffset += blockSize;
-		}
+		allocatedBlocks.push_back(currentOffset);
 
 
 	}
@@ -2853,7 +2929,7 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 		block.size = bytesRead;
 		// block doesnt exitsts
 		if (!re.getBlockHashTable().exists(block.hashBl)) {
-			block.writeToContainer(containerWrite, buffer, bytesRead, allocatedBlocks[i]);
+			allocatedBlocks.push_back(block.writeToContainer(containerWrite, buffer, bytesRead, allocatedBlocks[i]));
 			// add the block hjash to tghe hashtable
 			re.getBlockHashTable().insert(block.hashBl, block.block_offset);
 		}
@@ -3245,11 +3321,12 @@ void rd(ResourceManager& re, String& dirName) {
 
 	// Removing the offset from children in parent and decreasing the size also
 	parentMeta->getChildren().remove(parentMeta->getChildren().indexOf(currentMeta->offset));
-	parentMeta->size -= currentMeta->size;
 	// serializing the child
 	containerWrite.clear();
 	containerWrite.seekp(parentMeta->offset, ios::beg);
-	currentMeta->serialize(containerWrite);
+	parentMeta->serialize(containerWrite);
 	delete currentMeta;
+	delete parentMeta;
+	parentMeta = nullptr;
 	currentMeta = nullptr;
 }
