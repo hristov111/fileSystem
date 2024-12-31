@@ -1846,16 +1846,21 @@ public:
 };
 // this needs to be serialized and deserialzied
 struct Block {
+
+	static const uint32_t MAGIC_NUMBER = 0xDEADBEEF;
 	uint64_t content_offset; // offset of the block content
 	uint64_t block_offset; // offset of the block metadata
 	long int numberOfFiles = 0;
 	uint64_t size; // size of the block
 	String hashBl;
 	uint32_t checksum; // Resilliency checksum
+	uint64_t serialized_size;
 
 	void serialize(std::ofstream& out) const {
 
 		out.clear();
+		out.write(reinterpret_cast<const char*>(&MAGIC_NUMBER), sizeof(MAGIC_NUMBER));
+
 		out.write(reinterpret_cast<const char*>(&content_offset), sizeof(content_offset));
 		out.write(reinterpret_cast<const char*>(&block_offset), sizeof(block_offset));
 		out.write(reinterpret_cast<const char*>(&numberOfFiles), sizeof(numberOfFiles));
@@ -1872,30 +1877,61 @@ struct Block {
 	static Block* deserialize(std::ifstream& in) {
 		Block* block = new Block();
 		in.clear();
-		in.read(reinterpret_cast<char*>(&block->content_offset), sizeof(block->content_offset));
-		in.read(reinterpret_cast<char*>(&block->block_offset), sizeof(block->block_offset));
-		in.read(reinterpret_cast<char*>(&block->numberOfFiles), sizeof(block->numberOfFiles));
+		try {
+			uint32_t magicNumber;
+			in.read(reinterpret_cast<char*>(&magicNumber), sizeof(magicNumber));
+			if (in.gcount() < sizeof(magicNumber) || magicNumber != MAGIC_NUMBER) {
+				throw runtime_error("magic number is not the same");
+			}
 
-		in.read(reinterpret_cast<char*>(&block->size), sizeof(block->size));
-		in.read(reinterpret_cast<char*>(&block->checksum), sizeof(block->checksum));
+			in.read(reinterpret_cast<char*>(&block->content_offset), sizeof(block->content_offset));
+			if (in.gcount() < sizeof(block->size)) {
+				throw runtime_error("Failed to deserialize");
+			}
+			in.read(reinterpret_cast<char*>(&block->block_offset), sizeof(block->block_offset));
+			if (in.gcount() < sizeof(block_offset)) {
+				throw runtime_error("Failed to deserialize");
+			}
+			in.read(reinterpret_cast<char*>(&block->numberOfFiles), sizeof(block->numberOfFiles));
+			if (in.gcount() < sizeof(numberOfFiles)) {
+				throw runtime_error("Failed to deserialize");
+			}
+			in.read(reinterpret_cast<char*>(&block->size), sizeof(block->size));
+			if (in.gcount() < sizeof(size)) {
+				throw runtime_error("Failed to deserialize");
+			}
+			in.read(reinterpret_cast<char*>(&block->checksum), sizeof(block->checksum));
+			if (in.gcount() < sizeof(checksum)) {
+				throw runtime_error("Failed to deserialize");
+			}
+			size_t hashLength;
+			in.read(reinterpret_cast<char*>(&hashLength), sizeof(hashLength));
+			if (in.gcount() < sizeof(hashLength) || hashLength == 0) {
+				throw runtime_error("Failed to deserialize");
+			}
+			block->hashBl.resize(hashLength);
+			in.read(&block->hashBl[0], hashLength);
+			if (in.gcount() < static_cast<streamsize>(hashLength)) {
+				throw runtime_error("Failed to deserialize");
+			}
+			if (!validateBlock(in, *block)) {
+				throw runtime_error("Failed to deserialize");
+			}
+			return block;
 
-		// Deserialize the hash string
-		size_t hashLength;
-		in.read(reinterpret_cast<char*>(&hashLength), sizeof(hashLength));
-
-		block->hashBl.resize(hashLength);
-		in.read(&block->hashBl[0], hashLength);
-
-		if (!validateBlock(in, *block)) {
+		}
+		catch (const exception& e) {
+			delete block;
 			return nullptr;
 		}
 
-		return block;
+		// Deserialize the hash string
 
+		
 	}
 	size_t getSerializedSize() const {
 		size_t fiexedSize = sizeof(content_offset) + sizeof(block_offset) + sizeof(numberOfFiles)
-			+ sizeof(size) + sizeof(checksum);
+			+ sizeof(size) + sizeof(checksum) + sizeof(serialized_size);
 
 		size_t dynamicsize = sizeof(size_t) + hashBl.getSize();
 		return fiexedSize + dynamicsize;
@@ -1904,6 +1940,7 @@ struct Block {
 		block_offset = offset;
 		size = buffersize;
 		numberOfFiles = nFile;
+		serialized_size = getSerializedSize();
 
 		size_t totalSize = std::max(buffersize, static_cast<size_t>(4096));
 		char paddedBuffer[4096] = { 0 };
