@@ -1174,6 +1174,8 @@ public:
 		// Write= the size of the vector
 		size_t blockKeyCount = keys.getSize();
 		out.write(reinterpret_cast<const char*>(&blockKeyCount), sizeof(blockKeyCount));
+		size_t children_count = children.getSize();
+		out.write(reinterpret_cast<const char*>(&children_count), sizeof(children_count));
 
 		// Write each string in the vectopr
 		for (const auto& key : keys) {
@@ -1181,9 +1183,6 @@ public:
 			out.write(reinterpret_cast<const char*>(&keyLength), sizeof(keyLength));
 			out.write(key.getData(), keyLength);
 		}
-		size_t children_count = children.getSize();
-		out.write(reinterpret_cast<const char*>(&children_count), sizeof(children_count));
-
 		for (const auto& child : children) {
 			out.write(reinterpret_cast<const char*>(&child), sizeof(child));
 		}
@@ -1191,6 +1190,18 @@ public:
 
 
 
+	}
+	void reset() {
+		memset(name, 0, sizeof(name));
+		max_capacity = 0;
+		isDirectory = false;
+		size = 0;
+		parent = 0;
+		serialized_size = 0;
+		isDeleted = false;
+
+		keys.clear();
+		children.clear();
 	}
 	static Metadata* deserialize(std::ifstream& in) {
 		Metadata* metadata = new Metadata();
@@ -1218,6 +1229,8 @@ public:
 
 			size_t blockKeyCount;
 			in.read(reinterpret_cast<char*>(&blockKeyCount), sizeof(blockKeyCount));
+			size_t childrenCount;
+			in.read(reinterpret_cast<char*>(&childrenCount), sizeof(childrenCount));
 			if (blockKeyCount > 0) {
 				metadata->keys.resize(blockKeyCount);
 				for (size_t i = 0; i < blockKeyCount; ++i) {
@@ -1229,9 +1242,6 @@ public:
 					}
 				}
 			}
-
-			size_t childrenCount;
-			in.read(reinterpret_cast<char*>(&childrenCount), sizeof(childrenCount));
 			if (childrenCount > 0) {
 				metadata->children.resize(childrenCount);
 				for (size_t i = 0; i < childrenCount; ++i) {
@@ -2097,7 +2107,7 @@ void cdRoot(ResourceManager& re);
 void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite, Metadata* currentMeta);
 void rd(ResourceManager& re, String& dirName);
 bool checkNames(ifstream& container, uint64_t parent_offset, String dirName);
-uint64_t getMetadataOff(ResourceManager& re, ofstream& contianerWrite, ifstream& containerRead, Metadata& fileMeta);
+bool getMetadataOff(ResourceManager& re, ofstream& contianerWrite, ifstream& containerRead, Metadata& fileMeta, uint64_t& metaoff);
 
 DynamicArray<String> split(const char* str, char delimeter) {
 	DynamicArray<String> res;
@@ -2419,9 +2429,9 @@ int main(int argc, char* argv[]) {
 	String fileSystem = "container.bin";
 
 
-	String newDir = "";
+	String newDir = "balo.txt";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
-	String fileName = "aaa.txt";
+	String fileName = "balo.txt";
 	String currentState = "root\\";
 	while (true) {
 		String command = "cpin";
@@ -2624,7 +2634,6 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 	containerRead.clear();
 	containerRead.seekg(child_offset, ios::beg);
 	Metadata* child = Metadata::deserialize(containerRead);
-	child->isDeleted = true;
 	// get the offset of the parent
 	parent_offset = child->parent;
 
@@ -2668,9 +2677,9 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 		block = nullptr;
 	}
 	// clear the list
-	child->getKyes().clear();
 	// Update the metadata in the container to rteflect the deletion
 	// go to the location of the fileMeta so we can overwrite it as deleted
+	child->reset();
 	containerWrite.clear();
 	containerWrite.seekp(child_offset, ios::beg);
 	child->serialize(containerWrite);
@@ -2707,28 +2716,29 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 
 }
 
-uint64_t getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& containerRead, Metadata& fileMeta) {
-	uint64_t metaOff;
+bool getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& containerRead, Metadata& fileMeta,uint64_t& metaoff) {
 	if (!re.getFreeMeta().empty()) {
-		metaOff = re.getFreeMeta().back();
+		metaoff = re.getFreeMeta().back();
 		re.getFreeMeta().pop_back();
 		// we need to get the deleted filemeta id and use it  in the new and not overwrite it
 		containerRead.clear();
-		containerRead.seekg(metaOff, ios::beg);
+		containerRead.seekg(metaoff, ios::beg);
 		Metadata* deletedMeta = Metadata::deserialize(containerRead);
 		fileMeta.id = deletedMeta->id;
+		fileMeta.serialized_size = deletedMeta->serialized_size;
 		delete deletedMeta;
+		return true;
 
 	}
 	else {
 
 		containerWrite.clear();
 		containerWrite.seekp(0, ios::end);
-		metaOff = containerWrite.tellp();
+		metaoff = containerWrite.tellp();
 		// Increment id for the next meta because we wont be using the deleted
 		re.incrementId();
+		return false;
 	}
-	return metaOff;
 }
 
 void ls(ResourceManager& re, String path) {
@@ -3089,36 +3099,50 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 
 	// CREATE THE FILE
 	// Metadata for the file
-	Metadata fileMeta;
-	String::custom_strncpy(fileMeta.name, fileName.getData(), sizeof(fileMeta.name));
-	fileMeta.isDirectory = false;
-	fileMeta.isDeleted = false;
-	fileMeta.size = 0;
-	fileMeta.parent = parent_offset;
-	fileMeta.id = re.getNextId();
+	Metadata* inUse;
+	String::custom_strncpy(inUse->name, fileName.getData(), sizeof(inUse->name));
+	inUse->isDirectory = false;
+	inUse->isDeleted = false;
+	inUse->size = 0;
+	inUse->parent = parent_offset;
+	inUse->id = re.getNextId();
 
 	// first file metaoffset is 190 
-
-
-	uint64_t metaOff = getMetadataOff(re,containerWrite,containerRead,fileMeta);
-	
+	Metadata* inUse = nullptr;
+	uint64_t metaOff;
+	if (getMetadataOff(re, containerWrite, containerRead, *inUse, metaOff)) {
+		containerRead.clear();
+		containerRead.seekg(metaOff, ios::beg);
+		inUse = Metadata::deserialize(containerRead);
+		inUse = &fileMeta;
+	}
+	else {
+		inUse = &fileMeta;
+	}
+	inUse->offset = metaOff;
+	String key1 = inUse->makeKey();
+	re.getMetadataHashTable().insert(key1, inUse->offset);
+	containerWrite.clear();
+	containerWrite.seekp(inUse->offset, ios::beg);
+	inUse->serialize(containerWrite);
 	// SERIALIZE THE FILEMETA
 	fileMeta.offset = metaOff;
 	String key1 = fileMeta.makeKey();
 	re.getMetadataHashTable().insert(key1, fileMeta.offset);
 	containerWrite.clear();
-	containerWrite.seekp(metaOff, ios::beg);
+	containerWrite.seekp(fileMeta.offset, ios::beg);
 	fileMeta.serialize(containerWrite);
 	// ADD THE FILEMETA OFFSET TO THE PARENT and serialize - here we need to update susbequent
 
 	containerRead.clear();
-	containerRead.seekg(metaOff, ios::beg);
+	containerRead.seekg(fileMeta.offset, ios::beg);
 	Metadata* as = Metadata::deserialize(containerRead);
 	cout << "filemeta name is " << as->name << "id is " << as->id << endl;
 
 	uint64_t oldsize = parent->getSerializedSize();
 	// capacity 1 - children - 1
 	parent->getChildren().push_back(fileMeta.offset);
+	parent->serialized_size = parent->getSerializedSize();
 	
 	updateInMemoryOffsets(&re, oldsize, *parent, parent->getSerializedSize());
 	fileMeta.offset = re.getMetadataHashTable().get(key1);
@@ -3199,11 +3223,12 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 		cout << "Before:" << endl;
 	}
 	// this only is true if we've got a delete file that once had a size
-	if (fileMeta.serialized_size > oldsize) {
-		oldSize = fileMeta.serialized_size;
+	size_t newSize = fileMeta.getSerializedSize();
+	if (fileMeta.serialized_size > fileMeta.getSerializedSize()) {
+		newSize = fileMeta.serialized_size;
 	}
 	// Here we need to update all susbequent offsets, if the old size if 
-	updateInMemoryOffsets(&re, oldsize, fileMeta, fileMeta.getSerializedSize());
+	updateInMemoryOffsets(&re, oldsize, fileMeta, newSize);
 	fileMeta.serialized_size = fileMeta.getSerializedSize();
 	containerWrite.clear();
 	containerWrite.seekp(fileMeta.offset, ios::beg);
