@@ -1,56 +1,58 @@
 ﻿  FileName.cpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.41.34120\include\filesystem(12): warning STL4038: The contents of <filesystem> are available only with C++17 or later.
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(169,3): warning C4984: 'if constexpr' is a C++17 language extension
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(169,3):
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(232,3): warning C4984: 'if constexpr' is a C++17 language extension
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(232,3):
       the template instantiation context (the oldest one first) is
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(60,7):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(99,7):
           while compiling class template 'DynamicArray'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(176,3): warning C4984: 'if constexpr' is a C++17 language extension
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(691,12): warning C4267: 'return': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1059,2): warning C4984: 'if constexpr' is a C++17 language extension
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1146,26): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1161,30): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1220,3): warning C4984: 'if constexpr' is a C++17 language extension
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1220,3):
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(239,3): warning C4984: 'if constexpr' is a C++17 language extension
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(754,12): warning C4267: 'return': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1122,2): warning C4984: 'if constexpr' is a C++17 language extension
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1222,27): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1236,31): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1243,27): warning C4101: 'e': unreferenced local variable
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1298,3): warning C4984: 'if constexpr' is a C++17 language extension
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1298,3):
       the template instantiation context (the oldest one first) is
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1213,7):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1291,7):
           while compiling class template 'HashTable'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1224,8): warning C4984: 'if constexpr' is a C++17 language extension
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2161,11): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2161,11): warning C4244:         with
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2161,11): warning C4244:         [
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2161,11): warning C4244:             T=uint64_t
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2161,11): warning C4244:         ]
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2864,23): warning C4018: '>': signed/unsigned mismatch
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(67,53): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(67,53):
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1302,8): warning C4984: 'if constexpr' is a C++17 language extension
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1968,27): warning C4101: 'e': unreferenced local variable
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2481,11): warning C4244: 'initializing': conversion from 'T' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2481,11): warning C4244:         with
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2481,11): warning C4244:         [
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2481,11): warning C4244:             T=uint64_t
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2481,11): warning C4244:         ]
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(3181,23): warning C4018: '>': signed/unsigned mismatch
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(106,53): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(106,53):
       the template instantiation context (the oldest one first) is
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2513,21):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2833,21):
           see reference to class template instantiation 'DynamicArray<char>' being compiled
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(67,2):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(106,2):
           while compiling class template member function 'DynamicArray<char>::DynamicArray(size_t)'
-              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2513,27):
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2833,27):
               see the first reference to 'DynamicArray<char>::DynamicArray' in 'printBlockAndContent'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(250,17): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(250,17):
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(313,17): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(313,17):
       the template instantiation context (the oldest one first) is
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2029,46):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2204,46):
           see reference to class template instantiation 'DynamicArray<myPair<Key,Value>>' being compiled
           with
           [
               Key=uint64_t,
               Value=StructType
           ]
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(241,5):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(304,5):
           while compiling class template member function 'T &DynamicArray<T>::operator [](size_t)'
           with
           [
               T=myPair<uint64_t,StructType>
           ]
-              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2035,25):
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2230,25):
               see the first reference to 'DynamicArray<myPair<Key,Value>>::operator []' in 'updateInMemoryOffsets'
           with
           [
@@ -58,51 +60,51 @@ C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(250,17): warni
               Value=StructType
           ]
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(340,11): warning C4267: '-=': conversion from 'size_t' to 'int', possible loss of data
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(340,11):
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(403,11): warning C4267: '-=': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(403,11):
       the template instantiation context (the oldest one first) is
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1082,25):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1145,25):
           see reference to class template instantiation 'DynamicArray<uint64_t>' being compiled
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(325,11):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(388,11):
           while compiling class template member function 'DynamicArray<uint64_t>::iterator DynamicArray<uint64_t>::erase(DynamicArray<uint64_t>::iterator,DynamicArray<uint64_t>::iterator)'
-              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2190,29):
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2510,29):
               see the first reference to 'DynamicArray<uint64_t>::erase' in 'allocatedContiguosBlocks'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1324,10): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1324,10):
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1402,10): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1402,10):
       the template instantiation context (the oldest one first) is
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1962,3):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2136,3):
           see reference to class template instantiation 'HashTable<uint64_t,StructType>' being compiled
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1321,7):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1399,7):
           while compiling class template member function 'void HashTable<uint64_t,StructType>::InsertionSort(DynamicArray<myPair<Key,Value>> &,bool) const'
           with
           [
               Key=uint64_t,
               Value=StructType
           ]
-              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1314,16):
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(1392,16):
               see the first reference to 'HashTable<uint64_t,StructType>::InsertionSort' in 'HashTable<uint64_t,StructType>::getsortedByKey'
-              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2029,61):
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2221,61):
               see the first reference to 'HashTable<uint64_t,StructType>::getsortedByKey' in 'updateInMemoryOffsets'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(351,11): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(351,11):
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(414,11): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+      C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(414,11):
       the template instantiation context (the oldest one first) is
-          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2189,21):
+          C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2509,21):
           see reference to function template instantiation 'void DynamicArray<uint64_t>::assign<DynamicArray<uint64_t>::iterator>(InputIterator,InputIterator)' being compiled
           with
           [
               InputIterator=DynamicArray<uint64_t>::iterator
           ]
-              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2189,27):
+              C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2509,27):
               see the first reference to 'DynamicArray<uint64_t>::assign' in 'allocatedContiguosBlocks'
   
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(353,10): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2998,1): warning C4172: returning address of local variable or temporary : errorMessage
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2707,1): warning C4172: returning address of local variable or temporary : errorMessage
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2713,1): warning C4172: returning address of local variable or temporary : errorMessage
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2721,1): warning C4172: returning address of local variable or temporary : errorMessage
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2738,1): warning C4172: returning address of local variable or temporary : errorMessage
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2757,1): warning C4172: returning address of local variable or temporary : errorMessage
-C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(2913,1): warning C4172: returning address of local variable or temporary : errorMessage
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(416,10): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(3319,1): warning C4172: returning address of local variable or temporary : errorMessage
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(3027,1): warning C4172: returning address of local variable or temporary : errorMessage
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(3033,1): warning C4172: returning address of local variable or temporary : errorMessage
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(3041,1): warning C4172: returning address of local variable or temporary : errorMessage
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(3058,1): warning C4172: returning address of local variable or temporary : errorMessage
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(3077,1): warning C4172: returning address of local variable or temporary : errorMessage
+C:\Users\vboxuser\source\repos\FileSystem\FileSystem\FileName.cpp(3234,1): warning C4172: returning address of local variable or temporary : errorMessage
   FileSystem.vcxproj -> C:\Users\vboxuser\source\repos\FileSystem\x64\Debug\FileSystem.exe

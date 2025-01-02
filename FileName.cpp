@@ -139,6 +139,19 @@ public:
 		}
 		return *this;
 	}
+	void insertionSort(function<bool(const T&, const T&)> comparator,bool ascending = true) {
+		for (int i = 0; i < size; ++i) {
+			T current = data[i];
+			int j = i - 1;
+
+			while (j >= 0 && (ascending ?comparator(current, data[j]): comparator(data[j], current))) {
+				data[j + 1] = data[j];
+				--j;
+			}
+			data[j + 1] = current;
+		}
+	}
+
 	DynamicArray& operator=(const DynamicArray& other) {
 		if (this != &other) {
 			delete[] data;
@@ -182,6 +195,17 @@ public:
 			delete[] data;
 			data = newData;
 			capacity = newCapacity;
+		}
+	}
+
+	void concatenate(const DynamicArray& other) {
+		if (size + other.getSize() > capacity) {
+			resize(size + other.getSize());
+		}
+
+		// append element from other to the current array
+		for (int i = 0; i < other.getSize(); ++i) {
+			data[size++] = other.data[i];
 		}
 	}
 
@@ -1120,7 +1144,7 @@ private:
 	DynamicArray<String> keys; // keys to the hashtable for the blocks
 	DynamicArray<uint64_t> children; // offsets of child files or directories 
 public:
-
+	static const uint32_t magicNumber = 0xBE50AA;
 	char name[100]; // file or directory name
 	size_t id;
 	size_t max_capacity = 0; // if the metadata is for directory (this is donna help when we are making rewrites of the container)
@@ -1128,7 +1152,7 @@ public:
 	uint64_t offset; // offset in the container
 	uint64_t size; 
 	uint64_t parent; // Parent directory's index in the metadata (0 for root)
-	uint64_t serialized_size;
+	uint64_t serialized_size = 0;
 	bool isDeleted;
 	void serialize(std::ofstream& out) {
 
@@ -1142,6 +1166,8 @@ public:
 		out.write(reinterpret_cast<const char*>(&parent), sizeof(parent));
 		out.write(reinterpret_cast<const char*>(&isDeleted), sizeof(isDeleted));
 		out.write(reinterpret_cast<const char*>(&serialized_size), sizeof(serialized_size));
+		out.write(reinterpret_cast<const char*>(&magicNumber), sizeof(magicNumber));
+
 
 
 
@@ -1169,47 +1195,57 @@ public:
 	static Metadata* deserialize(std::ifstream& in) {
 		Metadata* metadata = new Metadata();
 		in.clear();
-		// Read fixed size fields
-		in.read(metadata->name, sizeof(metadata->name));
-		in.read(reinterpret_cast<char*>(&metadata->max_capacity), sizeof(metadata->max_capacity));
-		in.read(reinterpret_cast<char*>(&metadata->id), sizeof(metadata->id));
-		in.read(reinterpret_cast<char*>(&metadata->isDirectory), sizeof(metadata->isDirectory));
-		in.read(reinterpret_cast<char*>(&metadata->offset), sizeof(metadata->offset));
-		in.read(reinterpret_cast<char*>(&metadata->size), sizeof(metadata->size));
-		in.read(reinterpret_cast<char*>(&metadata->parent), sizeof(metadata->parent));
-		in.read(reinterpret_cast<char*>(&metadata->isDeleted), sizeof(metadata->isDeleted));
 
+		try {
+			in.read(metadata->name, sizeof(metadata->name));
+			in.read(reinterpret_cast<char*>(&metadata->max_capacity), sizeof(metadata->max_capacity));
+			in.read(reinterpret_cast<char*>(&metadata->id), sizeof(metadata->id));
+			in.read(reinterpret_cast<char*>(&metadata->isDirectory), sizeof(metadata->isDirectory));
+			in.read(reinterpret_cast<char*>(&metadata->offset), sizeof(metadata->offset));
+			in.read(reinterpret_cast<char*>(&metadata->size), sizeof(metadata->size));
+			in.read(reinterpret_cast<char*>(&metadata->parent), sizeof(metadata->parent));
+			in.read(reinterpret_cast<char*>(&metadata->isDeleted), sizeof(metadata->isDeleted));
+			in.read(reinterpret_cast<char*>(&metadata->serialized_size), sizeof(metadata->serialized_size));
+			
+			uint32_t fileMagicNumber;
+			in.read(reinterpret_cast<char*>(&fileMagicNumber), sizeof(fileMagicNumber));
 
-		// Read each string in the vector
-		  // Deserialize the keys vector
-		size_t blockKeyCount;
-		in.read(reinterpret_cast<char*>(&blockKeyCount), sizeof(blockKeyCount));
-		if (blockKeyCount > 0) {
-			metadata->keys.resize(blockKeyCount);
-			for (size_t i = 0; i < blockKeyCount; ++i) {
-				size_t keyLength;
-				in.read(reinterpret_cast<char*>(&keyLength), sizeof(keyLength));
-				if (keyLength > 0) {
-					metadata->keys[i].resize(keyLength);
-					in.read(&metadata->keys[i][0], keyLength);
+			if (fileMagicNumber != Metadata::magicNumber) {
+				throw std::runtime_error("Invalid magic number. Expected: 0x" +
+					std::to_string(Metadata::magicNumber) +
+					", Got: 0x" + std::to_string(fileMagicNumber));
+			}
+
+			size_t blockKeyCount;
+			in.read(reinterpret_cast<char*>(&blockKeyCount), sizeof(blockKeyCount));
+			if (blockKeyCount > 0) {
+				metadata->keys.resize(blockKeyCount);
+				for (size_t i = 0; i < blockKeyCount; ++i) {
+					size_t keyLength;
+					in.read(reinterpret_cast<char*>(&keyLength), sizeof(keyLength));
+					if (keyLength > 0) {
+						metadata->keys[i].resize(keyLength);
+						in.read(&metadata->keys[i][0], keyLength);
+					}
 				}
 			}
-		}
 
-		// Deserialize the children vector
-		size_t childrenCount;
-		in.read(reinterpret_cast<char*>(&childrenCount), sizeof(childrenCount));
-		if (childrenCount > 0) {
-			metadata->children.resize(childrenCount);
-			for (size_t i = 0; i < childrenCount; ++i) {
-				in.read(reinterpret_cast<char*>(&metadata->children[i]), sizeof(metadata->children[i]));
+			size_t childrenCount;
+			in.read(reinterpret_cast<char*>(&childrenCount), sizeof(childrenCount));
+			if (childrenCount > 0) {
+				metadata->children.resize(childrenCount);
+				for (size_t i = 0; i < childrenCount; ++i) {
+					in.read(reinterpret_cast<char*>(&metadata->children[i]), sizeof(metadata->children[i]));
+				}
 			}
+			return metadata;
 		}
-
-
-		return metadata;
-
-
+		catch (const exception& e) {
+			delete metadata; 
+			metadata = nullptr;
+			return metadata;
+		}
+	
 	}
 
 	String makeKey() {
@@ -1227,7 +1263,7 @@ public:
 
 	uint64_t getSerializedSize() const {
 		uint64_t fixedSize = sizeof(name) + sizeof(id) + sizeof(isDirectory)
-			+ sizeof(isDeleted) + sizeof(size) + sizeof(parent) + sizeof(offset) + sizeof(max_capacity) + sizeof(serialized_size);
+			+ sizeof(isDeleted) + sizeof(size) + sizeof(parent) + sizeof(offset) + sizeof(max_capacity) + sizeof(serialized_size) + sizeof(magicNumber);
 
 		// dynamic size member keys (vector<string>)
 		uint64_t keysSize = sizeof(size_t);
@@ -1459,7 +1495,8 @@ public:
 
 	}
 };
-
+struct Block;
+void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block& block, uint64_t newSize);
 void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& parent, uint64_t newSize);
 class ResourceManager {
 private:
@@ -1853,6 +1890,7 @@ struct Block {
 	long int numberOfFiles = 0;
 	uint64_t size; // size of the block
 	String hashBl;
+	DynamicArray<uint64_t> fileMeta; // an array of file offsets that use this block
 	uint32_t checksum; // Resilliency checksum
 	uint64_t serialized_size;
 
@@ -1860,6 +1898,7 @@ struct Block {
 
 		out.clear();
 		out.write(reinterpret_cast<const char*>(&MAGIC_NUMBER), sizeof(MAGIC_NUMBER));
+		out.write(reinterpret_cast<const char*>(&serialized_size), sizeof(serialized_size));
 
 		out.write(reinterpret_cast<const char*>(&content_offset), sizeof(content_offset));
 		out.write(reinterpret_cast<const char*>(&block_offset), sizeof(block_offset));
@@ -1873,6 +1912,8 @@ struct Block {
 		out.write(reinterpret_cast<const char*>(&hashLength), sizeof(hashLength));
 		//hashBl.data() gives a pointer to the raw character array inside the string.
 		out.write(hashBl.getData(), hashLength);
+
+		
 	}
 	static Block* deserialize(std::ifstream& in) {
 		Block* block = new Block();
@@ -1883,6 +1924,8 @@ struct Block {
 			if (in.gcount() < sizeof(magicNumber) || magicNumber != MAGIC_NUMBER) {
 				throw runtime_error("magic number is not the same");
 			}
+			in.read(reinterpret_cast<char*>(&block->serialized_size), sizeof(block->serialized_size));
+
 
 			in.read(reinterpret_cast<char*>(&block->content_offset), sizeof(block->content_offset));
 			if (in.gcount() < sizeof(block->size)) {
@@ -1917,6 +1960,8 @@ struct Block {
 			if (!validateBlock(in, *block)) {
 				throw runtime_error("Failed to deserialize");
 			}
+
+
 			return block;
 
 		}
@@ -1936,12 +1981,26 @@ struct Block {
 		size_t dynamicsize = sizeof(size_t) + hashBl.getSize();
 		return fiexedSize + dynamicsize;
 	}
-	uint64_t writeToContainer(std::ofstream& container, const char* buffer, size_t buffersize, uint64_t offset, int nFile=1 ) {
+	uint64_t writeToContainer(ResourceManager& re, const char* buffer, size_t buffersize, uint64_t offset, int nFile = 1,bool exist = false) {
+		// firstly lets deserialize theo offset if exist
+		serialized_size = getSerializedSize();
+		block_offset = offset;
+		ifstream& containerRead = re.getInputStream();
+		ofstream& containerWrite = re.getOutputStream();
+
+		if (exist) {
+			containerRead.clear();
+			containerRead.seekg(offset, ios::beg);
+			Block* currentBlock = Block::deserialize(containerRead);
+			if (currentBlock->serialized_size > serialized_size) {
+				updateInMemoryOffsetsfromBlock(&re,currentBlock->serialized_size,*this,serialized_size);
+			}
+			delete currentBlock;
+			currentBlock = nullptr;
+		}
 		block_offset = offset;
 		size = buffersize;
 		numberOfFiles = nFile;
-		serialized_size = getSerializedSize();
-
 		size_t totalSize = std::max(buffersize, static_cast<size_t>(4096));
 		char paddedBuffer[4096] = { 0 };
 
@@ -1952,33 +2011,33 @@ struct Block {
 		CRC32 crc32;
 		checksum = crc32.calculate(buffer,buffersize);
 
-		container.clear();
-		container.seekp(offset, ios::beg);
+		containerWrite.clear();
+		containerWrite.seekp(offset, ios::beg);
 
 
 		// write the block's data to thec ontainer
-		content_offset = offset +getSerializedSize();
-		if (!container) {
+		content_offset = offset +serialized_size;
+		if (!containerWrite) {
 			throw runtime_error("Error: Failed to seek to block offset");
 		}
-		serialize(container);
+		serialize(containerWrite);
 		// Write the block's data to the container
-		container.clear();
-		container.seekp(content_offset, ios::beg);
-		if (!container) {
+		containerWrite.clear();
+		containerWrite.seekp(content_offset, ios::beg);
+		if (!containerWrite) {
 			throw runtime_error("Error: Failed to see to content offset");
 		}
-		container.write(buffer, buffersize);
-		if (!container) {
+		containerWrite.write(buffer, buffersize);
+		if (!containerWrite) {
 			throw runtime_error("Error: Failed to write blocjk data to container");
 		}
-		container.flush();
-		if (!container) {
+		containerWrite.flush();
+		if (!containerWrite) {
 			throw runtime_error("Error: Failed to flush the container stream");
 		}
-		container.clear();
-		container.seekp(0, ios::end);
-		return container.tellp();
+		containerWrite.clear();
+		containerWrite.seekp(0, ios::end);
+		return containerWrite.tellp();
 
 	}
 	String hashBlock(const char* block, size_t size) {
@@ -2020,7 +2079,6 @@ struct Block {
 	~Block(){}
 
 };
-
 
 void InsertionSort(DynamicArray<uint64_t>& array, bool descending = false);
 DynamicArray<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize);
@@ -2104,8 +2162,8 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 		containerRead.clear();
 		containerRead.seekg(child_offset, ios::beg);
 		Metadata* childMeta = Metadata::deserialize(containerRead); // 4436
-		// here we update parent offset of files in subsequent folders (this means that we recursively went into another dir and we need to update file parent offset in that dir)
-		if (base_offset != parent.offset) {
+		// if this is through we have gone deep in the tree
+		if (base_offset< parent.offset) {
 			childMeta->parent += sizeDifference;
 			re.getOutputStream().clear();
 			re.getOutputStream().seekp(child_offset, ios::beg);
@@ -2127,13 +2185,31 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& parent , uint64_t newSize) {
 
 	// if the size has changed, update subsequent offsets in the hashtable
-	if (newSize != oldSize) {
+	if (newSize > oldSize) {
 		int64_t sizeDifference = newSize - oldSize;
+
+		ofstream& contasinerWrite = re->getOutputStream();
+		ifstream& containerRead = re->getInputStream();
 
 		// here we need to implement deph first seach
 		HashTable<String, uint64_t> dp;
 		// offsets that we need to loop deserialize change them and serialize again (first we need to sor them)
 		HashTable<uint64_t, StructType> hash_offsets;
+
+
+		auto& metaHaSh = re->getMetadataHashTable();
+		auto& blockHash = re->getBlockHashTable();
+		auto& freeMeta = re->getFreeMeta();
+		auto& freeBlocks = re->getFreeblocks();
+		DynamicArray<myPair<uint64_t, StructType>> freemetaandBlocks;
+		// adding the delet meta
+		for (auto& metas : freeMeta) {
+			freemetaandBlocks.push_back(myPair<uint64_t, StructType>(metas, METADATA));
+		}
+		// adding the deleted blcoks
+		for (auto& blocks : freeBlocks) {
+			freemetaandBlocks.push_back(myPair<uint64_t, StructType>(blocks, BLOCK));
+		}
 
 	/*	ifstream& containerRead1 = re.getInputStream();
 		containerRead1.clear();
@@ -2143,9 +2219,12 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 		// Update offsets in the hashtable
 		dfs(*re,re->getInputStream(),parent,dp,parent.offset, hash_offsets,sizeDifference);
 		DynamicArray<myPair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
+		sorted_offsets.concatenate(freemetaandBlocks);
+		// sort in descending
+		sorted_offsets.insertionSort([](const myPair<uint64_t, StructType>& a, const myPair<uint64_t, StructType>& b) {
+			return a.first > b.first;
+			});
 
-		ofstream& contasinerWrite = re->getOutputStream();
-		ifstream& containerRead = re->getInputStream();
 
 		for (int i = 0; i < sorted_offsets.getSize(); ++i) {
 			uint64_t curr_offset = sorted_offsets[i].first;
@@ -2170,11 +2249,10 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 				containerRead.clear();
 				containerRead.seekg(block->content_offset, ios::beg);
 				containerRead.read(buffer, block->size);
-				block->writeToContainer(contasinerWrite,buffer,block->size,block->block_offset, block->numberOfFiles);
+				block->writeToContainer(*re,buffer,block->size,block->block_offset, block->numberOfFiles);
 			}
 		}
 
-		auto& metaHaSh = re->getMetadataHashTable();
 		metaHaSh.iterate([&](const String& key, uint64_t& of) {
 			if (parent.offset < of) {
 				of += sizeDifference; // Shift subsequent offsets
@@ -2202,7 +2280,133 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 
 }
 
+// every blcok has its own metadata and whenevrr we delete and accomodate new data there it get bigger or smaller so we need to updat  offsets
 
+void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block& block, uint64_t newSize) {
+	if (newSize != oldSize) {
+		int64_t sizeDifference = newSize - oldSize;
+
+		ofstream& contasinerWrite = re->getOutputStream();
+		ifstream& containerRead = re->getInputStream();
+
+		// here we need to implement deph first seach
+		HashTable<String, uint64_t> dp;
+		// offsets that we need to loop deserialize change them and serialize again (first we need to sor them)
+		HashTable<uint64_t, StructType> hash_offsets;
+		// ideally, we can first sort the metahashtable, get first filemeta that is bigger than the block offset and dfs from there , that would be the best scenario
+		// for the freemeta and free blocks we only need to change their offsets, but they must be sorted
+		// now we take the 
+		auto& metaHaSh = re->getMetadataHashTable();
+		auto& blockHash = re->getBlockHashTable();
+		auto& freeMeta = re->getFreeMeta();
+		auto& freeBlocks= re->getFreeblocks();
+		DynamicArray<myPair<uint64_t, StructType>> freemetaandBlocks;
+		// adding the delet meta
+		for (auto& metas : freeMeta) {
+			freemetaandBlocks.push_back(myPair<uint64_t, StructType>(metas, METADATA));
+		}
+		// adding the deleted blcoks
+		for (auto& blocks : freeBlocks) {
+			freemetaandBlocks.push_back(myPair<uint64_t, StructType>(blocks,BLOCK));
+		}
+
+
+		uint64_t fileMeta = 0;
+		uint64_t blockMeta = 0;
+		Metadata* meta = nullptr;
+		Block* currentBlock= nullptr;
+		// filemeta, we need to append also the delete filemeta 
+		// here we sort the hashtable and then add if there is any free meta into it
+		DynamicArray<myPair<String,uint64_t>> sorted = metaHaSh.getsortedByKey(false);
+		// we need to see if there are 
+		for (const auto& filemeta : sorted) {
+			if (filemeta.second > block.block_offset) {
+				fileMeta = filemeta.second;
+				break;
+			}
+		}
+		if (fileMeta != 0) {
+			containerRead.clear();
+			containerRead.seekg(fileMeta, ios::beg);
+			meta = Metadata::deserialize(containerRead);
+			// now we need to get the parent of that
+			containerRead.clear();
+			containerRead.seekg(meta->parent, ios::beg);
+			delete meta;
+			meta = nullptr;
+			// so now that is the parent
+			meta = Metadata::deserialize(containerRead);
+		}
+		// now we need to be sure if there is blcoks between the filemeta and the current blcok  
+		// so we need to sort the freeBlocks, take the first and comapre it with the 
+		
+		/*	ifstream& containerRead1 = re.getInputStream();
+			containerRead1.clear();
+			containerRead1.seekg(970, ios::beg);
+			Metadata* as = Metadata::deserialize(containerRead1);*/
+
+			// Update offsets in the hashtable
+		dfs(*re, re->getInputStream(), *meta, dp, block.block_offset, hash_offsets, sizeDifference);
+		DynamicArray<myPair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
+		sorted_offsets.concatenate(freemetaandBlocks);
+		// sort in descending
+		sorted_offsets.insertionSort([](const myPair<uint64_t, StructType>& a, const myPair<uint64_t, StructType>& b) {
+			return a.first > b.first;
+			},false);
+
+
+		for (int i = 0; i < sorted_offsets.getSize(); ++i) {
+			uint64_t curr_offset = sorted_offsets[i].first;
+			StructType curr_type = sorted_offsets[i].second;
+
+			if (curr_type == METADATA) {
+				containerRead.clear();
+				containerRead.seekg(curr_offset, ios::beg);
+				Metadata* meta = Metadata::deserialize(containerRead);
+				meta->offset += sizeDifference;
+				contasinerWrite.clear();
+				contasinerWrite.seekp(meta->offset, ios::beg);
+				meta->serialize(contasinerWrite);
+				delete meta;
+			}
+			else if (curr_type == BLOCK) {
+				containerRead.clear();
+				containerRead.seekg(curr_offset, ios::beg);
+				Block* block = Block::deserialize(containerRead);
+				block->block_offset += sizeDifference;
+				char buffer[4096];
+				containerRead.clear();
+				containerRead.seekg(block->content_offset, ios::beg);
+				containerRead.read(buffer, block->size);
+				block->writeToContainer(*re, buffer, block->size, block->block_offset, block->numberOfFiles);
+			}
+		}
+
+		metaHaSh.iterate([&](const String& key, uint64_t& of) {
+			if (block.block_offset< of) {
+				of += sizeDifference; // Shift subsequent offsets
+			}
+			});
+
+		auto& hashtable = re->getBlockHashTable();
+		hashtable.iterate([&](const String& key, uint64_t& of) {
+			if (block.block_offset< of) {
+				of += sizeDifference; // Shift subsequent offsets
+			}
+			});
+		for (auto& off : re->getFreeblocks()) {
+			if (off > block.block_offset) {
+				off += sizeDifference;
+			}
+		}
+		for (auto& off : re->getFreeMeta()) {
+			if (off > block.block_offset) {
+				off += sizeDifference;
+			}
+		}
+
+	}
+}
 
 
 
@@ -2217,10 +2421,10 @@ int main(int argc, char* argv[]) {
 
 	String newDir = "";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
-	String fileName = "Ehee\\mmmm.txt";
+	String fileName = "aaa.txt";
 	String currentState = "root\\";
 	while (true) {
-		String command = "ls";
+		String command = "cpin";
 		cout << currentState << endl;
 		if (command == "md") {
 			ResourceManager resource(fileSystem, command);
@@ -2895,6 +3099,7 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 
 	// first file metaoffset is 190 
 
+
 	uint64_t metaOff = getMetadataOff(re,containerWrite,containerRead,fileMeta);
 	
 	// SERIALIZE THE FILEMETA
@@ -2955,7 +3160,7 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 	char buffer[4096];
 	size_t remainingSize = filesize;
 	uint64_t oldSize = fileMeta.getSerializedSize();
-	for(size_t i =0;i< allocatedBlocks.getSize();++i){
+	for(size_t i =0;i< requiredBlocks;++i){
 
 		size_t chunk_size = std::min(blockSize, remainingSize);
 		src.read(buffer, chunk_size);
@@ -2966,7 +3171,7 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 		block.size = bytesRead;
 		// block doesnt exitsts
 		if (!re.getBlockHashTable().exists(block.hashBl)) {
-			allocatedBlocks.push_back(block.writeToContainer(containerWrite, buffer, bytesRead, allocatedBlocks[i]));
+			allocatedBlocks.push_back(block.writeToContainer(re, buffer, bytesRead, allocatedBlocks[i], allocatedBlocks.getSize() == requiredBlocks));
 			// add the block hjash to tghe hashtable
 			re.getBlockHashTable().insert(block.hashBl, block.block_offset);
 		}
@@ -2993,9 +3198,13 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 		remainingSize -= bytesRead;
 		cout << "Before:" << endl;
 	}
-
+	// this only is true if we've got a delete file that once had a size
+	if (fileMeta.serialized_size > oldsize) {
+		oldSize = fileMeta.serialized_size;
+	}
 	// Here we need to update all susbequent offsets, if the old size if 
 	updateInMemoryOffsets(&re, oldsize, fileMeta, fileMeta.getSerializedSize());
+	fileMeta.serialized_size = fileMeta.getSerializedSize();
 	containerWrite.clear();
 	containerWrite.seekp(fileMeta.offset, ios::beg);
 	fileMeta.serialize(containerWrite);
@@ -3032,7 +3241,7 @@ bool checkNames(ifstream& container,uint64_t parent_offset, String dirName) {
 	container.seekg(parent_offset, ios::beg);
 	Metadata* parent = Metadata::deserialize(container); 
 
-	for (const auto& child_offset : parent->getChildren()) {
+	for (auto& child_offset : parent->getChildren()) {
 		container.clear();
 		container.seekg(child_offset);
 		Metadata* child = Metadata::deserialize(container);// 4690
