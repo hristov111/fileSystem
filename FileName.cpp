@@ -103,13 +103,23 @@ private:
 	int size;
 
 public:
-	DynamicArray(size_t inititalCapacity=10) : capacity(inititalCapacity), size(0) {
+	DynamicArray(size_t inititalCapacity = 0) : capacity(inititalCapacity), size(0) {
 		if (capacity == 0) {
 			capacity = 10;
 		}
 		data = new T[capacity];
 		for (size_t i = size; i < capacity; ++i) {
 			data[i] = T();
+
+		}
+	}
+	DynamicArray(size_t initialCapacity, const T& defaultvalue):capacity(initialCapacity), size(0) {
+		if (capacity == 0) {
+			capacity = 10;
+		}
+		data = new T[capacity];
+		for (size_t i = size; i < capacity; ++i) {
+			data[i] = defaultvalue;
 
 		}
 	}
@@ -1197,8 +1207,7 @@ public:
 		isDirectory = false;
 		size = 0;
 		parent = 0;
-		serialized_size = 0;
-		isDeleted = false;
+		isDeleted = true;
 
 		keys.clear();
 		children.clear();
@@ -1506,8 +1515,8 @@ public:
 	}
 };
 struct Block;
-void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block& block, uint64_t newSize);
-void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& parent, uint64_t newSize);
+void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block& block, uint64_t newSize, bool backwards = false);
+void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& parent, uint64_t newSize, bool backwards =false);
 class ResourceManager {
 private:
 	String currentOperation;
@@ -1991,19 +2000,19 @@ struct Block {
 		size_t dynamicsize = sizeof(size_t) + hashBl.getSize();
 		return fiexedSize + dynamicsize;
 	}
-	uint64_t writeToContainer(ResourceManager& re, const char* buffer, size_t buffersize, uint64_t offset, int nFile = 1,bool exist = false) {
+	uint64_t writeToContainer(ResourceManager& re, const char* buffer, size_t buffersize, uint64_t offset, int nFile = 1,bool exist = true) {
 		// firstly lets deserialize theo offset if exist
 		serialized_size = getSerializedSize();
 		block_offset = offset;
 		ifstream& containerRead = re.getInputStream();
 		ofstream& containerWrite = re.getOutputStream();
 
-		if (exist) {
+		if (!exist) {
 			containerRead.clear();
 			containerRead.seekg(offset, ios::beg);
 			Block* currentBlock = Block::deserialize(containerRead);
 			if (currentBlock->serialized_size > serialized_size) {
-				updateInMemoryOffsetsfromBlock(&re,currentBlock->serialized_size,*this,serialized_size);
+				updateInMemoryOffsetsfromBlock(&re,currentBlock->serialized_size,*this,serialized_size,true);
 			}
 			delete currentBlock;
 			currentBlock = nullptr;
@@ -2107,7 +2116,7 @@ void cdRoot(ResourceManager& re);
 void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& containerWrite, Metadata* currentMeta);
 void rd(ResourceManager& re, String& dirName);
 bool checkNames(ifstream& container, uint64_t parent_offset, String dirName);
-bool getMetadataOff(ResourceManager& re, ofstream& contianerWrite, ifstream& containerRead, Metadata& fileMeta, uint64_t& metaoff);
+bool getMetadataOff(ResourceManager& re, ofstream& contianerWrite, ifstream& containerRead, uint64_t& metaoff);
 
 DynamicArray<String> split(const char* str, char delimeter) {
 	DynamicArray<String> res;
@@ -2150,7 +2159,7 @@ void getBlockOffsets(ResourceManager& re,Metadata& childMeta, HashTable<uint64_t
 
 
 // the plan is this - we go through every dir and ile and put them in a vector of offsets
-void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<String, uint64_t>& dp, uint64_t base_offset, HashTable<uint64_t, StructType>& for_upgrading, int64_t sizeDifference) {
+void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<String, uint64_t>& dp, uint64_t base_offset, HashTable<uint64_t, StructType>& for_upgrading, int64_t sizeDifference, bool backwards) {
 
 	String key = parent.makeKey();
 	// check if the value for this parent is already computed 
@@ -2174,6 +2183,7 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 		Metadata* childMeta = Metadata::deserialize(containerRead); // 4436
 		// if this is through we have gone deep in the tree
 		if (base_offset< parent.offset) {
+			
 			childMeta->parent += sizeDifference;
 			re.getOutputStream().clear();
 			re.getOutputStream().seekp(child_offset, ios::beg);
@@ -2181,7 +2191,7 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 		}
 		child_offset += sizeDifference;
 		if (childMeta->isDirectory) {
-			dfs(re,containerRead, *childMeta, dp, base_offset, for_upgrading,sizeDifference);
+			dfs(re,containerRead, *childMeta, dp, base_offset, for_upgrading,sizeDifference,backwards);
 			re.getOutputStream().clear();
 			re.getOutputStream().seekp(childMeta->offset, ios::beg);
 			childMeta->serialize(re.getOutputStream());
@@ -2192,10 +2202,10 @@ void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<
 		delete childMeta;
 	}
 }
-void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& parent , uint64_t newSize) {
+void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& parent , uint64_t newSize,bool backwards) {
 
 	// if the size has changed, update subsequent offsets in the hashtable
-	if (newSize > oldSize) {
+	if ((newSize > oldSize && !backwards) || (oldSize > newSize && backwards)) {
 		int64_t sizeDifference = newSize - oldSize;
 
 		ofstream& contasinerWrite = re->getOutputStream();
@@ -2227,13 +2237,13 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 		Metadata* as = Metadata::deserialize(containerRead1);*/
 
 		// Update offsets in the hashtable
-		dfs(*re,re->getInputStream(),parent,dp,parent.offset, hash_offsets,sizeDifference);
+		dfs(*re,re->getInputStream(),parent,dp,parent.offset, hash_offsets,sizeDifference,backwards);
 		DynamicArray<myPair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
 		sorted_offsets.concatenate(freemetaandBlocks);
 		// sort in descending
 		sorted_offsets.insertionSort([](const myPair<uint64_t, StructType>& a, const myPair<uint64_t, StructType>& b) {
 			return a.first > b.first;
-			});
+			},!backwards?true:false);
 
 
 		for (int i = 0; i < sorted_offsets.getSize(); ++i) {
@@ -2272,7 +2282,7 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 		auto& hashtable = re->getBlockHashTable();
 		hashtable.iterate([&](const String& key, uint64_t& of) {
 			if (parent.offset < of) {
-				of += sizeDifference; // Shift subsequent offsets
+				of += sizeDifference;// Shift subsequent offsets
 			}
 			});
 		for (auto& off : re->getFreeblocks()) {
@@ -2292,7 +2302,7 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 
 // every blcok has its own metadata and whenevrr we delete and accomodate new data there it get bigger or smaller so we need to updat  offsets
 
-void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block& block, uint64_t newSize) {
+void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block& block, uint64_t newSize, bool backwards) {
 	if (newSize != oldSize) {
 		int64_t sizeDifference = newSize - oldSize;
 
@@ -2356,13 +2366,13 @@ void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block&
 			Metadata* as = Metadata::deserialize(containerRead1);*/
 
 			// Update offsets in the hashtable
-		dfs(*re, re->getInputStream(), *meta, dp, block.block_offset, hash_offsets, sizeDifference);
+		dfs(*re, re->getInputStream(), *meta, dp, block.block_offset, hash_offsets, sizeDifference,backwards);
 		DynamicArray<myPair<uint64_t, StructType>> sorted_offsets = hash_offsets.getsortedByKey();
 		sorted_offsets.concatenate(freemetaandBlocks);
 		// sort in descending
 		sorted_offsets.insertionSort([](const myPair<uint64_t, StructType>& a, const myPair<uint64_t, StructType>& b) {
 			return a.first > b.first;
-			},false);
+			}, !backwards ? true : false);
 
 
 		for (int i = 0; i < sorted_offsets.getSize(); ++i) {
@@ -2431,7 +2441,7 @@ int main(int argc, char* argv[]) {
 
 	String newDir = "balo.txt";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
-	String fileName = "balo.txt";
+	String fileName = "aloo.txt";
 	String currentState = "root\\";
 	while (true) {
 		String command = "cpin";
@@ -2510,6 +2520,17 @@ void InsertionSort(DynamicArray<uint64_t>& array, bool descending) {
 DynamicArray<uint64_t> allocatedContiguosBlocks(ResourceManager& re, size_t requiredBlocks, size_t blockSize) {
 	DynamicArray<uint64_t> allocatedBlocks;
 	InsertionSort(re.getFreeblocks());
+
+	// case if only one block is required
+	if (requiredBlocks == 1) {
+		for (size_t i = 0; i < re.getFreeblocks().getSize(); ++i) {
+			allocatedBlocks.push_back(re.getFreeblocks()[i]);
+			re.getFreeblocks().pop_back();
+			return allocatedBlocks;
+		}
+	}
+
+
 	size_t contiguouscount = 1;
 
 	for (size_t i = 1; i < re.getFreeblocks().getSize(); ++i) {
@@ -2658,7 +2679,6 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 		containerRead.seekg(off, ios::beg);
 		Block* block = Block::deserialize(containerRead);
 		if (block->numberOfFiles < 2) {
-			block->size = 0;
 			block->numberOfFiles = 0;
 			containerWrite.clear();
 			containerWrite.seekp(off, ios::beg);
@@ -2683,6 +2703,7 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 	containerWrite.clear();
 	containerWrite.seekp(child_offset, ios::beg);
 	child->serialize(containerWrite);
+
 	// add it to the free meta file
 	re.getFreeMeta().push_back(child_offset);
 	re.getMetadataHashTable().remove(child->makeKey());
@@ -2716,17 +2737,10 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 
 }
 
-bool getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& containerRead, Metadata& fileMeta,uint64_t& metaoff) {
+bool getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& containerRead,uint64_t& metaoff) {
 	if (!re.getFreeMeta().empty()) {
 		metaoff = re.getFreeMeta().back();
 		re.getFreeMeta().pop_back();
-		// we need to get the deleted filemeta id and use it  in the new and not overwrite it
-		containerRead.clear();
-		containerRead.seekg(metaoff, ios::beg);
-		Metadata* deletedMeta = Metadata::deserialize(containerRead);
-		fileMeta.id = deletedMeta->id;
-		fileMeta.serialized_size = deletedMeta->serialized_size;
-		delete deletedMeta;
 		return true;
 
 	}
@@ -2736,7 +2750,6 @@ bool getMetadataOff(ResourceManager& re, ofstream& containerWrite,ifstream& cont
 		containerWrite.seekp(0, ios::end);
 		metaoff = containerWrite.tellp();
 		// Increment id for the next meta because we wont be using the deleted
-		re.incrementId();
 		return false;
 	}
 }
@@ -3099,25 +3112,38 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 
 	// CREATE THE FILE
 	// Metadata for the file
-	Metadata* inUse;
-	String::custom_strncpy(inUse->name, fileName.getData(), sizeof(inUse->name));
-	inUse->isDirectory = false;
-	inUse->isDeleted = false;
-	inUse->size = 0;
-	inUse->parent = parent_offset;
-	inUse->id = re.getNextId();
-
 	// first file metaoffset is 190 
 	Metadata* inUse = nullptr;
 	uint64_t metaOff;
-	if (getMetadataOff(re, containerWrite, containerRead, *inUse, metaOff)) {
+	if (getMetadataOff(re, containerWrite, containerRead, metaOff)) {
 		containerRead.clear();
 		containerRead.seekg(metaOff, ios::beg);
 		inUse = Metadata::deserialize(containerRead);
-		inUse = &fileMeta;
+		if (inUse->serialized_size > inUse->getSerializedSize()) {
+			const size_t diff = inUse->serialized_size - inUse->getSerializedSize();
+			inUse->parent = parent_offset;
+			updateInMemoryOffsets(&re, inUse->serialized_size, *inUse, inUse->getSerializedSize(), true);
+			// here we need to call updateInMemoryOffsets but in backwards
+			// everything after the filemeta must be shifted backwards with diff
+
+		}
+		String::custom_strncpy(inUse->name, fileName.getData(), sizeof(inUse->name));
+		inUse->isDirectory = false;
+		inUse->isDeleted = false;
+		inUse->size = 0;
+
 	}
 	else {
-		inUse = &fileMeta;
+		inUse = new Metadata();
+		String::custom_strncpy(inUse->name, fileName.getData(), sizeof(inUse->name));
+		inUse->isDirectory = false;
+		inUse->isDeleted = false;
+		inUse->size = 0;
+		inUse->parent = parent_offset;
+		inUse->id = re.getNextId();
+		re.incrementId();
+
+
 	}
 	inUse->offset = metaOff;
 	String key1 = inUse->makeKey();
@@ -3126,26 +3152,22 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 	containerWrite.seekp(inUse->offset, ios::beg);
 	inUse->serialize(containerWrite);
 	// SERIALIZE THE FILEMETA
-	fileMeta.offset = metaOff;
-	String key1 = fileMeta.makeKey();
-	re.getMetadataHashTable().insert(key1, fileMeta.offset);
-	containerWrite.clear();
-	containerWrite.seekp(fileMeta.offset, ios::beg);
-	fileMeta.serialize(containerWrite);
 	// ADD THE FILEMETA OFFSET TO THE PARENT and serialize - here we need to update susbequent
 
 	containerRead.clear();
-	containerRead.seekg(fileMeta.offset, ios::beg);
+	containerRead.seekg(inUse->offset, ios::beg);
 	Metadata* as = Metadata::deserialize(containerRead);
 	cout << "filemeta name is " << as->name << "id is " << as->id << endl;
 
+
+
 	uint64_t oldsize = parent->getSerializedSize();
 	// capacity 1 - children - 1
-	parent->getChildren().push_back(fileMeta.offset);
+	parent->getChildren().push_back(inUse->offset);
 	parent->serialized_size = parent->getSerializedSize();
 	
 	updateInMemoryOffsets(&re, oldsize, *parent, parent->getSerializedSize());
-	fileMeta.offset = re.getMetadataHashTable().get(key1);
+	inUse->offset = re.getMetadataHashTable().get(key1);
 
 	// capacity- 2 - children 1
 
@@ -3168,14 +3190,14 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 
 	// Step 1: Try to allocated from free blocks
 	DynamicArray<uint64_t> allocatedBlocks = allocatedContiguosBlocks(re,requiredBlocks, blockSize);
-
+	bool notEmpty= false;
 	// Step 2 : If no free blocks are available, append to the end of the file
 	if (allocatedBlocks.empty()) {
 		// Get the current end of the container
 		containerRead.clear();
 		containerRead.seekg(0, ios::end);
 		uint64_t currentOffset = containerRead.tellg();
-
+		notEmpty = true;
 		allocatedBlocks.push_back(currentOffset);
 
 
@@ -3183,7 +3205,7 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 	// copy file content in chunks
 	char buffer[4096];
 	size_t remainingSize = filesize;
-	uint64_t oldSize = fileMeta.getSerializedSize();
+	uint64_t oldSize = inUse->getSerializedSize();
 	for(size_t i =0;i< requiredBlocks;++i){
 
 		size_t chunk_size = std::min(blockSize, remainingSize);
@@ -3195,7 +3217,7 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 		block.size = bytesRead;
 		// block doesnt exitsts
 		if (!re.getBlockHashTable().exists(block.hashBl)) {
-			allocatedBlocks.push_back(block.writeToContainer(re, buffer, bytesRead, allocatedBlocks[i], allocatedBlocks.getSize() == requiredBlocks));
+			allocatedBlocks.push_back(block.writeToContainer(re, buffer, bytesRead, allocatedBlocks[i], 1,notEmpty));
 			// add the block hjash to tghe hashtable
 			re.getBlockHashTable().insert(block.hashBl, block.block_offset);
 		}
@@ -3217,28 +3239,23 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 			delete bl;
 			
 		}
-		fileMeta.size += bytesRead;
-		fileMeta.getKyes().push_back(block.hashBl);
+		inUse->size += bytesRead;
+		inUse->getKyes().push_back(block.hashBl);
 		remainingSize -= bytesRead;
 		cout << "Before:" << endl;
 	}
 	// this only is true if we've got a delete file that once had a size
-	size_t newSize = fileMeta.getSerializedSize();
-	if (fileMeta.serialized_size > fileMeta.getSerializedSize()) {
-		newSize = fileMeta.serialized_size;
-	}
 	// Here we need to update all susbequent offsets, if the old size if 
-	updateInMemoryOffsets(&re, oldsize, fileMeta, newSize);
-	fileMeta.serialized_size = fileMeta.getSerializedSize();
+	updateInMemoryOffsets(&re, oldsize, *inUse, inUse->getSerializedSize());
+	inUse->serialized_size = inUse->getSerializedSize();
 	containerWrite.clear();
-	containerWrite.seekp(fileMeta.offset, ios::beg);
-	fileMeta.serialize(containerWrite);
-
+	containerWrite.seekp(inUse->offset, ios::beg);
+	inUse->serialize(containerWrite);
 	// Right here we need to loop over every parent till we reach the root and update their sizes 
 	uint64_t offset = parent_offset;
 	while (true) { // -1 because the parent of the root is -1 by default
 		// update the size of the current meta
-		parent->size += fileMeta.size;
+		parent->size += inUse->size;
 		containerWrite.clear();
 		containerWrite.seekp(offset, ios::beg);
 		parent->serialize(containerWrite);
@@ -3351,16 +3368,30 @@ String& md(ResourceManager& re, String& directoryName) {
 	parentMeta = Metadata::deserialize(container);
 
 	// Create new directory metadata
-	Metadata* newDirMeta = new Metadata();
-	String::custom_strncpy(newDirMeta->name, directoryName.getData(), sizeof(newDirMeta->name));
-	newDirMeta->isDirectory = true;
-	newDirMeta->size = 0;
-	newDirMeta->parent = parent_offset;
-	newDirMeta->isDeleted = false;
-	newDirMeta->id = re.getNextId();
-
+	Metadata* newDirMeta = nullptr;
 	// Determine the offset for the new directory metadata
-	uint64_t metaOff = getMetadataOff(re, containerWrite, container, *newDirMeta);
+	uint64_t metaOff;
+	if (getMetadataOff(re, containerWrite, container, metaOff)) {
+		container.clear();
+		container.seekg(metaOff, ios::beg);
+		newDirMeta = Metadata::deserialize(container);
+		String::custom_strncpy(newDirMeta->name, directoryName.getData(), sizeof(newDirMeta->name));
+		newDirMeta->isDirectory = true;
+		newDirMeta->size = 0;
+		newDirMeta->parent = parent_offset;
+		newDirMeta->isDeleted = false;
+
+	}
+	else {
+		newDirMeta = new Metadata();
+		String::custom_strncpy(newDirMeta->name, directoryName.getData(), sizeof(newDirMeta->name));
+		newDirMeta->isDirectory = true;
+		newDirMeta->size = 0;
+		newDirMeta->parent = parent_offset;
+		newDirMeta->isDeleted = false;
+		newDirMeta->id = re.getNextId();
+		re.incrementId();
+	}
 
 	// SERIALIZE THE FILEMETA
 	newDirMeta->offset = metaOff;
@@ -3373,6 +3404,7 @@ String& md(ResourceManager& re, String& directoryName) {
 
 	uint64_t oldsize = parentMeta->getSerializedSize();
 	parentMeta->getChildren().push_back(newDirMeta->offset);
+	parentMeta->serialized_size = parentMeta->getSerializedSize();
 
 
 	updateInMemoryOffsets(&re, oldsize, *parentMeta, parentMeta->getSerializedSize());
@@ -3383,6 +3415,10 @@ String& md(ResourceManager& re, String& directoryName) {
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
 	parentMeta->serialize(containerWrite);
+	delete parentMeta;
+	parentMeta = nullptr;
+	delete newDirMeta;
+	newDirMeta = nullptr;
 	return directoryName;
 }
 
@@ -3491,8 +3527,7 @@ void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& container
 		Metadata* currentFile = Metadata::deserialize(containerRead);
 		if (currentFile->isDirectory && !currentFile->isDeleted) {
 			DeleteDir(re,containerRead, containerWrite, currentFile);
-			currentFile->isDeleted = true;
-			currentFile->getChildren().clear();
+			currentFile->reset();
 			re.getFreeMeta().push_back(currentFile->offset);
 			containerWrite.clear();
 			containerWrite.seekp(currentFile->offset, ios::beg);
@@ -3583,8 +3618,7 @@ void rd(ResourceManager& re, String& dirName) {
 	// deleting the currentMeta children 
 	DeleteDir(re, containerRead, containerWrite, currentMeta);
 	// updating the actual file for reuse
-	currentMeta->isDeleted = true;
-	currentMeta->getChildren().clear();
+	currentMeta->reset();
 	re.getFreeMeta().push_back(currentMeta->offset);
 	containerWrite.clear();
 	containerWrite.seekp(currentMeta->offset, ios::beg);
