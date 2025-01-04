@@ -737,7 +737,12 @@ public:
 
 		return *this;
 	}
-
+	void clear() {
+		delete[] data;
+		data = new char[1];
+		data[0] = '\0';
+		length = 0;
+	}
 	String& operator=(String&& other) noexcept {
 		if (this != &other) {
 			delete[] data;
@@ -1909,10 +1914,18 @@ struct Block {
 	long int numberOfFiles = 0;
 	uint64_t size; // size of the block
 	String hashBl;
-	DynamicArray<uint64_t> fileMeta; // an array of file offsets that use this block
 	uint32_t checksum; // Resilliency checksum
 	uint64_t serialized_size;
 
+	void reset() {
+		content_offset = 0;
+		numberOfFiles = 0;
+		size = 0;
+		hashBl.clear();
+		checksum = 0;
+		serialized_size = 0;
+
+	}
 	void serialize(std::ofstream& out) const {
 
 		out.clear();
@@ -1995,7 +2008,7 @@ struct Block {
 	}
 	size_t getSerializedSize() const {
 		size_t fiexedSize = sizeof(content_offset) + sizeof(block_offset) + sizeof(numberOfFiles)
-			+ sizeof(size) + sizeof(checksum) + sizeof(serialized_size);
+			+ sizeof(size) + sizeof(checksum) + sizeof(serialized_size) + sizeof(MAGIC_NUMBER);
 
 		size_t dynamicsize = sizeof(size_t) + hashBl.getSize();
 		return fiexedSize + dynamicsize;
@@ -2016,6 +2029,7 @@ struct Block {
 			}
 			delete currentBlock;
 			currentBlock = nullptr;
+
 		}
 		block_offset = offset;
 		size = buffersize;
@@ -2046,7 +2060,7 @@ struct Block {
 		if (!containerWrite) {
 			throw runtime_error("Error: Failed to see to content offset");
 		}
-		containerWrite.write(buffer, buffersize);
+		containerWrite.write(paddedBuffer, totalSize);
 		if (!containerWrite) {
 			throw runtime_error("Error: Failed to write blocjk data to container");
 		}
@@ -2157,7 +2171,19 @@ void getBlockOffsets(ResourceManager& re,Metadata& childMeta, HashTable<uint64_t
 	}
 }
 
-
+void updateBlock(ResourceManager& re, uint64_t offset) {
+	ifstream& containerRead = re.getInputStream();
+	containerRead.clear();
+	containerRead.seekg(offset, ios::beg);
+	Block* block = Block::deserialize(containerRead);
+	char buffer[4096];
+	containerRead.clear();
+	containerRead.seekg(block->content_offset, ios::beg);
+	containerRead.read(buffer, block->size);
+	block->writeToContainer(re, buffer, block->size, block->block_offset, block->numberOfFiles);
+	delete block;
+	block = nullptr;
+}
 // the plan is this - we go through every dir and ile and put them in a vector of offsets
 void dfs(ResourceManager& re,ifstream& containerRead,Metadata& parent,HashTable<String, uint64_t>& dp, uint64_t base_offset, HashTable<uint64_t, StructType>& for_upgrading, int64_t sizeDifference, bool backwards) {
 
@@ -2224,11 +2250,17 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 		DynamicArray<myPair<uint64_t, StructType>> freemetaandBlocks;
 		// adding the delet meta
 		for (auto& metas : freeMeta) {
-			freemetaandBlocks.push_back(myPair<uint64_t, StructType>(metas, METADATA));
+			if (metas > parent.offset) {
+				freemetaandBlocks.push_back(myPair<uint64_t, StructType>(metas, METADATA));
+
+			}
 		}
 		// adding the deleted blcoks
 		for (auto& blocks : freeBlocks) {
-			freemetaandBlocks.push_back(myPair<uint64_t, StructType>(blocks, BLOCK));
+			if (blocks > parent.offset) {
+				freemetaandBlocks.push_back(myPair<uint64_t, StructType>(blocks, BLOCK));
+
+			}
 		}
 
 	/*	ifstream& containerRead1 = re.getInputStream();
@@ -2250,6 +2282,7 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 			uint64_t curr_offset = sorted_offsets[i].first;
 			StructType curr_type = sorted_offsets[i].second;
 
+
 			if (curr_type == METADATA) {
 				containerRead.clear();
 				containerRead.seekg(curr_offset, ios::beg);
@@ -2270,6 +2303,9 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 				containerRead.seekg(block->content_offset, ios::beg);
 				containerRead.read(buffer, block->size);
 				block->writeToContainer(*re,buffer,block->size,block->block_offset, block->numberOfFiles);
+
+				delete block;
+				block = nullptr;
 			}
 		}
 
@@ -2303,7 +2339,7 @@ void updateInMemoryOffsets(ResourceManager* re, size_t& oldSize, Metadata& paren
 // every blcok has its own metadata and whenevrr we delete and accomodate new data there it get bigger or smaller so we need to updat  offsets
 
 void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block& block, uint64_t newSize, bool backwards) {
-	if (newSize != oldSize) {
+	if ((newSize > oldSize && !backwards) || (oldSize > newSize && backwards)) {
 		int64_t sizeDifference = newSize - oldSize;
 
 		ofstream& contasinerWrite = re->getOutputStream();
@@ -2323,11 +2359,17 @@ void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block&
 		DynamicArray<myPair<uint64_t, StructType>> freemetaandBlocks;
 		// adding the delet meta
 		for (auto& metas : freeMeta) {
-			freemetaandBlocks.push_back(myPair<uint64_t, StructType>(metas, METADATA));
+			if (metas > block.block_offset) {
+				freemetaandBlocks.push_back(myPair<uint64_t, StructType>(metas, METADATA));
+
+			}
 		}
 		// adding the deleted blcoks
 		for (auto& blocks : freeBlocks) {
-			freemetaandBlocks.push_back(myPair<uint64_t, StructType>(blocks,BLOCK));
+			if (blocks > block.block_offset) {
+				freemetaandBlocks.push_back(myPair<uint64_t, StructType>(blocks, BLOCK));
+
+			}
 		}
 
 
@@ -2356,6 +2398,16 @@ void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block&
 			meta = nullptr;
 			// so now that is the parent
 			meta = Metadata::deserialize(containerRead);
+			if (!meta) {
+				return;
+			}
+			updateBlock(*re,block.block_offset);
+		}
+		else {
+			// here we understand that we dont have to to upgrade after the block so we need to update only the content offset
+			updateBlock(*re, block.block_offset);
+			return;
+
 		}
 		// now we need to be sure if there is blcoks between the filemeta and the current blcok  
 		// so we need to sort the freeBlocks, take the first and comapre it with the 
@@ -2399,6 +2451,8 @@ void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block&
 				containerRead.seekg(block->content_offset, ios::beg);
 				containerRead.read(buffer, block->size);
 				block->writeToContainer(*re, buffer, block->size, block->block_offset, block->numberOfFiles);
+				delete block;
+				block = nullptr;
 			}
 		}
 
@@ -2439,12 +2493,12 @@ int main(int argc, char* argv[]) {
 	String fileSystem = "container.bin";
 
 
-	String newDir = "balo.txt";
+	String newDir = "bal.txt";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
-	String fileName = "aloo.txt";
+	String fileName = "bal.txt";
 	String currentState = "root\\";
 	while (true) {
-		String command = "cpin";
+		String command = "rm";
 		cout << currentState << endl;
 		if (command == "md") {
 			ResourceManager resource(fileSystem, command);
@@ -2651,6 +2705,7 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 	else {
 		return;
 	}
+	// first we need to bring back the parent child back, then resize the filermeta back to 170,bring back the block to original size,
 	// get the child first 
 	containerRead.clear();
 	containerRead.seekg(child_offset, ios::beg);
@@ -2662,11 +2717,11 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 	containerRead.clear();
 	containerRead.seekg(parent_offset, ios::beg);
 	Metadata* parent = Metadata::deserialize(containerRead);
+	size_t oldSize = parent->getSerializedSize();
 	parent->getChildren().remove(parent->getChildren().indexOf(child_offset));
+	// here we need to resize the meta instead of doing it when we create the file so 
+	re.getFreeMeta().push_back(child_offset);
 
-	containerWrite.clear();
-	containerWrite.seekp(parent_offset, ios::beg);
-	parent->serialize(containerWrite);
 
 	// children 0 , capacity 1
 	// but what if the actual block is being used by others, we wont delete it and we wont add it to the freeblocks 
@@ -2679,11 +2734,16 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 		containerRead.seekg(off, ios::beg);
 		Block* block = Block::deserialize(containerRead);
 		if (block->numberOfFiles < 2) {
-			block->numberOfFiles = 0;
+			size_t oldSize = block->getSerializedSize();
+			re.getFreeblocks().push_back(off);
+			block->reset();
+			containerWrite.clear();
+			containerWrite.seekp(block->block_offset, ios::beg);
+			block->serialize(containerWrite);
+			updateInMemoryOffsetsfromBlock(&re, oldSize, *block, block->getSerializedSize(), true);
 			containerWrite.clear();
 			containerWrite.seekp(off, ios::beg);
-			block->serialize(containerWrite);
-			re.getFreeblocks().push_back(off); // getting the offset of the actual block, that will lead to the content of the block
+			block->serialize(containerWrite);// getting the offset of the actual block, that will lead to the content of the block
 			// remove the block from hashtable
 			re.getBlockHashTable().remove(key); // remove the key from the block hash table 
 		}
@@ -2696,17 +2756,29 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 		delete block;
 		block = nullptr;
 	}
-	// clear the list
-	// Update the metadata in the container to rteflect the deletion
-	// go to the location of the fileMeta so we can overwrite it as deleted
+	re.getMetadataHashTable().remove(child->makeKey());
 	child->reset();
 	containerWrite.clear();
 	containerWrite.seekp(child_offset, ios::beg);
 	child->serialize(containerWrite);
+	// here we first update evertyhing from the parent because we removed 8 byte from his children array - 8 byte because of parent
+	updateInMemoryOffsets(&re, oldSize, *parent, parent->getSerializedSize(), true);
+	updateInMemoryOffsets(&re, child->serialized_size, *child,child->getSerializedSize(), true);
+
+
+
+	parent->serialized_size = parent->getSerializedSize();
+	containerWrite.clear();
+	containerWrite.seekp(parent_offset, ios::beg);
+	parent->serialize(containerWrite);
+
+	//// here we need to resize again, because we need the defauklt size of the filemeta
+	// clear the list
+	// Update the metadata in the container to rteflect the deletion
+	// go to the location of the fileMeta so we can overwrite it as deleted
+	
 
 	// add it to the free meta file
-	re.getFreeMeta().push_back(child_offset);
-	re.getMetadataHashTable().remove(child->makeKey());
 
 	uint64_t offset = parent_offset;
 	while (true) { // -1 because the parent of the root is -1 by default
@@ -2829,6 +2901,12 @@ void ls(ResourceManager& re, String path) {
 	for (const auto& off : parent->getChildren()) {
 		containerRead.seekg(off, ios::beg);
 		Metadata* currentChild = Metadata::deserialize(containerRead);
+		if (!currentChild->isDirectory) {
+			for (auto& key : currentChild->getKyes()) {
+				printBlockAndContent(re, re.getBlockHashTable().get(key));
+			}
+
+		}
 		// check the parent
 		containerRead.clear();
 		containerRead.seekg(currentChild->parent);
@@ -2841,21 +2919,21 @@ void ls(ResourceManager& re, String path) {
 }
 
 void printBlockAndContent(ResourceManager & re, uint64_t offset) {
-	ifstream& file = re.getInputStream();
+	ifstream& containerRead = re.getInputStream();
 
 	// seek the offset
-	file.clear();
-	file.seekg(offset, ios::beg);
-	if (!file) {
+	containerRead.clear();
+	containerRead.seekg(offset, ios::beg);
+	if (!containerRead) {
 		std::cerr << "Error: Seek failed. Offset may be invalid.\n";
 		return;
 	}
-	Block* block = Block::deserialize(file);
-	file.clear();
-	file.seekg(block->content_offset, ios::beg);
-	DynamicArray<char> buffer(block->size);
+	Block* block = Block::deserialize(containerRead);
+	containerRead.clear();
+	containerRead.seekg(block->content_offset, ios::beg);
+	DynamicArray<char> buffer(block->size,0);
 
-	file.read(buffer.get_data(), block->size);
+	containerRead.read(buffer.get_data(), block->size);
 	cout << "Block content: ";
 	for (char c : buffer) {
 		cout << c;
@@ -3119,14 +3197,11 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 		containerRead.clear();
 		containerRead.seekg(metaOff, ios::beg);
 		inUse = Metadata::deserialize(containerRead);
-		if (inUse->serialized_size > inUse->getSerializedSize()) {
-			const size_t diff = inUse->serialized_size - inUse->getSerializedSize();
-			inUse->parent = parent_offset;
-			updateInMemoryOffsets(&re, inUse->serialized_size, *inUse, inUse->getSerializedSize(), true);
-			// here we need to call updateInMemoryOffsets but in backwards
-			// everything after the filemeta must be shifted backwards with diff
-
-		}
+		//if (inUse->serialized_size > inUse->getSerializedSize()) {
+		//	// this resizes the filemeta, pussing bacjkt he block and conentent
+		//	updateInMemoryOffsets(&re,inUse->serialized_size,*inUse,inUse->getSerializedSize(),true);
+		//}
+		inUse->parent = parent_offset;
 		String::custom_strncpy(inUse->name, fileName.getData(), sizeof(inUse->name));
 		inUse->isDirectory = false;
 		inUse->isDeleted = false;
@@ -3151,6 +3226,7 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 	containerWrite.clear();
 	containerWrite.seekp(inUse->offset, ios::beg);
 	inUse->serialize(containerWrite);
+
 	// SERIALIZE THE FILEMETA
 	// ADD THE FILEMETA OFFSET TO THE PARENT and serialize - here we need to update susbequent
 
@@ -3159,23 +3235,27 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 	Metadata* as = Metadata::deserialize(containerRead);
 	cout << "filemeta name is " << as->name << "id is " << as->id << endl;
 
-
-
 	uint64_t oldsize = parent->getSerializedSize();
 	// capacity 1 - children - 1
 	parent->getChildren().push_back(inUse->offset);
 	parent->serialized_size = parent->getSerializedSize();
-	
 	updateInMemoryOffsets(&re, oldsize, *parent, parent->getSerializedSize());
 	inUse->offset = re.getMetadataHashTable().get(key1);
-
-	// capacity- 2 - children 1
-
 	containerWrite.clear();
 	containerWrite.seekp(parent_offset, ios::beg);
 	parent->serialize(containerWrite);
 
+	//containerRead.clear();
+	//containerRead.seekg(re.getFreeblocks()[0], ios::beg);
+	//Block* blo1 = Block::deserialize(containerRead);
+	
 
+	// capacity- 2 - children 1
+
+
+	//containerRead.clear();
+	//containerRead.seekg(re.getFreeblocks()[0],ios::beg);
+	//Block* blo = Block::deserialize(containerRead);
 
 
 
@@ -3212,17 +3292,17 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 		src.read(buffer, chunk_size);
 		size_t bytesRead = src.gcount();
 
-		Block block;
-		block.hashBl = block.hashBlock(buffer, bytesRead);
-		block.size = bytesRead;
+		Block* block = new Block();
+		block->hashBl = block->hashBlock(buffer, bytesRead);
+		block->size = bytesRead;
 		// block doesnt exitsts
-		if (!re.getBlockHashTable().exists(block.hashBl)) {
-			allocatedBlocks.push_back(block.writeToContainer(re, buffer, bytesRead, allocatedBlocks[i], 1,notEmpty));
+		if (!re.getBlockHashTable().exists(block->hashBl)) {
+			allocatedBlocks.push_back(block->writeToContainer(re, buffer, bytesRead, allocatedBlocks[i], 1,notEmpty));
 			// add the block hjash to tghe hashtable
-			re.getBlockHashTable().insert(block.hashBl, block.block_offset);
+			re.getBlockHashTable().insert(block->hashBl, block->block_offset);
 		}
 		else { // this here means that the block exist and i need to get it and add 1 to numberOfFiles
-			uint64_t off = re.getBlockHashTable().get(block.hashBl);
+			uint64_t off = re.getBlockHashTable().get(block->hashBl);
 			// Validate the offset
 			if (off < 0 || off > containerRead.tellg()) {
 				throw std::runtime_error("Invalid offset retrieved from the hash table");
@@ -3237,17 +3317,23 @@ String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t 
 			containerWrite.flush();
 
 			delete bl;
+			bl = nullptr;
 			
 		}
 		inUse->size += bytesRead;
-		inUse->getKyes().push_back(block.hashBl);
+		inUse->getKyes().push_back(block->hashBl);
 		remainingSize -= bytesRead;
 		cout << "Before:" << endl;
+		delete block;
+		block = nullptr;
 	}
 	// this only is true if we've got a delete file that once had a size
 	// Here we need to update all susbequent offsets, if the old size if 
-	updateInMemoryOffsets(&re, oldsize, *inUse, inUse->getSerializedSize());
-	inUse->serialized_size = inUse->getSerializedSize();
+	// this pushes the block and content away
+
+
+	updateInMemoryOffsets(&re, oldSize, *inUse, inUse->getSerializedSize());
+	inUse->serialized_size = inUse->getSerializedSize();	
 	containerWrite.clear();
 	containerWrite.seekp(inUse->offset, ios::beg);
 	inUse->serialize(containerWrite);
@@ -3528,7 +3614,14 @@ void DeleteDir(ResourceManager& re, ifstream& containerRead, ofstream& container
 		if (currentFile->isDirectory && !currentFile->isDeleted) {
 			DeleteDir(re,containerRead, containerWrite, currentFile);
 			currentFile->reset();
+			// here we need to delete the dir from the parent and resize the container
+			size_t oldsize = currentMeta->getSerializedSize();
+			currentMeta->getChildren().remove(currentMeta->getChildren().indexOf(currentFile->offset));
 			re.getFreeMeta().push_back(currentFile->offset);
+			//updateInMemoryOffsets(&re,oldsize,*currentMeta,currentMeta->getSerializedSize(),true);
+			containerWrite.clear();
+			containerWrite.seekp(currentMeta->offset, ios::beg);
+			currentMeta->serialize(containerWrite);
 			containerWrite.clear();
 			containerWrite.seekp(currentFile->offset, ios::beg);
 			currentFile->serialize(containerWrite);
@@ -3625,7 +3718,9 @@ void rd(ResourceManager& re, String& dirName) {
 	currentMeta->serialize(containerWrite);
 
 	// Removing the offset from children in parent and decreasing the size also
+	size_t oldSize = parentMeta->getSerializedSize();
 	parentMeta->getChildren().remove(parentMeta->getChildren().indexOf(currentMeta->offset));
+	/*updateInMemoryOffsets(&re,oldSize,*parentMeta,parentMeta->getSerializedSize(),true);*/
 	// serializing the child
 	containerWrite.clear();
 	containerWrite.seekp(parentMeta->offset, ios::beg);
