@@ -2022,6 +2022,7 @@ struct Block {
 			containerRead.clear();
 			containerRead.seekg(offset, ios::beg);
 			Block* currentBlock = Block::deserialize(containerRead);
+			numberOfFiles = nFile;
 			updateInMemoryOffsetsfromBlock(&re,currentBlock->serialized_size,*this,serialized_size);
 			delete currentBlock;
 			currentBlock = nullptr;
@@ -2489,12 +2490,12 @@ int main(int argc, char* argv[]) {
 	String fileSystem = "container.bin";
 
 
-	String newDir = "eee.txt";
+	String newDir = "govnio.txt";
 	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
-	String fileName = "kaka.txt";
+	String fileName = "govnio.txt";
 	String currentState = "root\\";
 	while (true) {
-		String command = "cpin";
+		String command = "rm";
 		cout << currentState << endl;
 		if (command == "md") {
 			ResourceManager resource(fileSystem, command);
@@ -2741,6 +2742,7 @@ void rm(ResourceManager& re , String& fileName, uint64_t actualOffset) {
 		}
 		else {
 			block->numberOfFiles--;
+
 			containerWrite.clear();
 			containerWrite.seekp(off, ios::beg);
 			block->serialize(containerWrite);
