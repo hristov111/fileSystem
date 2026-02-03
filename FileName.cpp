@@ -1159,7 +1159,7 @@ private:
 	DynamicArray<String> keys; // keys to the hashtable for the blocks
 	DynamicArray<uint64_t> children; // offsets of child files or directories 
 public:
-	static const uint32_t magicNumber = 0xBE50AA;
+	static constexpr uint32_t magicNumber = 0xBE50AA;
 	char name[100]; // file or directory name
 	size_t id;
 	size_t max_capacity = 0; // if the metadata is for directory (this is donna help when we are making rewrites of the container)
@@ -1617,10 +1617,11 @@ private:
 		hash1Offset = vec2Offset + 1024;
 		hash2Offset = hash1Offset + 1024;
 		root_offset = hash2Offset + 1024;
-		// we first write the offsets for the vectors and hashtables because they wont change in size
-		// Create the root directory metadata
-		Metadata rootDir;
-		strncpy_s(rootDir.name, "/", sizeof(rootDir.name));
+	// we first write the offsets for the vectors and hashtables because they wont change in size
+	// Create the root directory metadata
+	Metadata rootDir;
+	strncpy(rootDir.name, "/", sizeof(rootDir.name) - 1);
+	rootDir.name[sizeof(rootDir.name) - 1] = '\0';
 		rootDir.isDirectory = true;
 		rootDir.size = 0;
 		rootDir.parent = -1; // Root has no parent
@@ -1908,7 +1909,7 @@ public:
 // this needs to be serialized and deserialzied
 struct Block {
 
-	static const uint32_t MAGIC_NUMBER = 0xDEADBEEF;
+	static constexpr uint32_t MAGIC_NUMBER = 0xDEADBEEF;
 	uint64_t content_offset; // offset of the block content
 	uint64_t block_offset; // offset of the block metadata
 	long int numberOfFiles = 0;
@@ -2110,8 +2111,8 @@ void printBlockAndContent(ResourceManager& re, uint64_t offset);
 void printMeta(ResourceManager& re, uint64_t offset);
 void cpout(ResourceManager& re, String fileName, const String outputPath);
 bool hasExtention(const String& fileName);
-String& cpin(ResourceManager& re, String& sourceName, String& fileName, size_t blockSize);
-String& md(ResourceManager& re, String& directoryName);
+String cpin(ResourceManager& re, String& sourceName, String& fileName, size_t blockSize);
+String md(ResourceManager& re, String& directoryName);
 void cd(ResourceManager& re, String& directoryName);
 void cdDots(ResourceManager& re);
 void cdRoot(ResourceManager& re);
@@ -2483,65 +2484,144 @@ void updateInMemoryOffsetsfromBlock(ResourceManager* re, size_t& oldSize, Block&
 
 // IMP: WHEN we create a file i need to update the size of every parent directory up to the root size
 int main(int argc, char* argv[]) {
-	/*if (argc < 2) {
-		std::cerr << "Ussage: <command> [arguments]\n";
-		return 1;
-	}*/
 	String fileSystem = "container.bin";
-
-
-	String newDir = "govnio.txt";
-	String outfile = "C:\\Users\\vboxuser\\Desktop\\muha.txt";
-	String fileName = "govnio.txt";
-	String currentState = "root\\";
+	String currentPath = "/";
+	
+	cout << "=== Custom File System ===" << endl;
+	cout << "Available commands:" << endl;
+	cout << "  md <dirname>       - Create directory" << endl;
+	cout << "  rd <dirname>       - Remove directory" << endl;
+	cout << "  cpin <src> <dest>  - Copy file into filesystem" << endl;
+	cout << "  cpout <src> <dest> - Copy file out of filesystem" << endl;
+	cout << "  rm <filename>      - Remove file" << endl;
+	cout << "  ls [path]          - List directory contents" << endl;
+	cout << "  cd <dirname>       - Change directory" << endl;
+	cout << "  exit               - Exit program" << endl;
+	cout << "===========================" << endl << endl;
+	
 	while (true) {
-		String command = "rm";
-		cout << currentState << endl;
-		if (command == "md") {
-			ResourceManager resource(fileSystem, command);
-
-			cout <<md(resource, newDir);
-			break;
+		cout << currentPath << "> ";
+		
+		string inputLine;
+		getline(cin, inputLine);
+		
+		if (inputLine.empty()) {
+			continue;
 		}
-		else if (command == "cpin") {
-			ResourceManager resource(fileSystem, command);
-			cpin(resource, outfile, fileName, 4096);
-			break;
+		
+		// Parse command and arguments
+		size_t firstSpace = inputLine.find(' ');
+		string commandStr = (firstSpace != string::npos) ? 
+			inputLine.substr(0, firstSpace) : inputLine;
+		string argsStr = (firstSpace != string::npos) ? 
+			inputLine.substr(firstSpace + 1) : "";
+		
+		String command(commandStr.c_str());
+		
+		try {
+			if (command == "exit" || command == "quit") {
+				cout << "Exiting filesystem..." << endl;
+				break;
+			}
+			else if (command == "md") {
+				if (argsStr.empty()) {
+					cerr << "Error: md requires a directory name" << endl;
+					continue;
+				}
+				ResourceManager resource(fileSystem, command);
+				String dirName(argsStr.c_str());
+				String result = md(resource, dirName);
+				if (result.getSize() > 0) {
+					cout << "Directory created: " << result.getData() << endl;
+				}
+			}
+			else if (command == "cpin") {
+				size_t space = argsStr.find(' ');
+				if (space == string::npos) {
+					cerr << "Error: cpin requires source and destination" << endl;
+					continue;
+				}
+				string src = argsStr.substr(0, space);
+				string dst = argsStr.substr(space + 1);
+				
+				ResourceManager resource(fileSystem, command);
+				String srcPath(src.c_str());
+				String dstPath(dst.c_str());
+				String result = cpin(resource, srcPath, dstPath, 4096);
+				if (result.getSize() == 0) {
+					cout << "File copied successfully" << endl;
+				}
+			}
+			else if (command == "ls") {
+				ResourceManager resource(fileSystem, command);
+				String path(argsStr.empty() ? "" : argsStr.c_str());
+				ls(resource, path);
+			}
+			else if (command == "cpout") {
+				size_t space = argsStr.find(' ');
+				if (space == string::npos) {
+					cerr << "Error: cpout requires source and destination" << endl;
+					continue;
+				}
+				string src = argsStr.substr(0, space);
+				string dst = argsStr.substr(space + 1);
+				
+				ResourceManager resource(fileSystem, command);
+				String srcPath(src.c_str());
+				String dstPath(dst.c_str());
+				cpout(resource, srcPath, dstPath);
+			}
+			else if (command == "rm") {
+				if (argsStr.empty()) {
+					cerr << "Error: rm requires a filename" << endl;
+					continue;
+				}
+				ResourceManager resource(fileSystem, command);
+				String fileName(argsStr.c_str());
+				rm(resource, fileName);
+				cout << "File removed successfully" << endl;
+			}
+			else if (command == "cd") {
+				if (argsStr.empty()) {
+					cerr << "Error: cd requires a directory name" << endl;
+					continue;
+				}
+				ResourceManager resource(fileSystem, command);
+				String dirName(argsStr.c_str());
+				cd(resource, dirName);
+				// Update current path display
+				currentPath = currentPath + dirName.getData() + "\\";
+			}
+			else if (command == "rd") {
+				if (argsStr.empty()) {
+					cerr << "Error: rd requires a directory name" << endl;
+					continue;
+				}
+				ResourceManager resource(fileSystem, command);
+				String dirName(argsStr.c_str());
+				rd(resource, dirName);
+				cout << "Directory removed successfully" << endl;
+			}
+			else if (command == "help") {
+				cout << "Available commands:" << endl;
+				cout << "  md <dirname>       - Create directory" << endl;
+				cout << "  rd <dirname>       - Remove directory" << endl;
+				cout << "  cpin <src> <dest>  - Copy file into filesystem" << endl;
+				cout << "  cpout <src> <dest> - Copy file out of filesystem" << endl;
+				cout << "  rm <filename>      - Remove file" << endl;
+				cout << "  ls [path]          - List directory contents" << endl;
+				cout << "  cd <dirname>       - Change directory" << endl;
+				cout << "  exit               - Exit program" << endl;
+			}
+			else {
+				cerr << "Error: Unknown command '" << command.getData() << "'" << endl;
+				cerr << "Type 'help' for available commands" << endl;
+			}
 		}
-		else if (command == "ls") {
-			ResourceManager resource(fileSystem, command);
-
-			ls(resource, newDir);
-			break;
-		}
-		else if (command == "cpout") {
-			ResourceManager resource(fileSystem, command);
-
-			cpout(resource, newDir, "C:\\Users\\vboxuser\\Desktop\\eheeee.txt");
-		}
-		else if (command == "rm") {
-			ResourceManager resource(fileSystem, command);
-
-			rm(resource, newDir);
-			break;
-		}
-		else if (command == "cd") {
-			ResourceManager resource(fileSystem, command);
-
-			cd(resource, newDir);
-		}
-		else if (command == "rd") {
-			ResourceManager resource(fileSystem, command);
-
-			rd(resource, newDir);
-			break;
-		}
-		else {
-			std::cerr << "Error: Unknown command '" << command << "'\n";
+		catch (const exception& e) {
+			cerr << "Error: " << e.what() << endl;
 		}
 	}
-
-	
 
 	return 0;
 }
@@ -3100,7 +3180,7 @@ bool hasExtention(const String& fileName) {
 	return (dotPosition != -1 && dotPosition != 0 && dotPosition != length - 1);
 }
 
-String& cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blockSize) {
+String cpin(ResourceManager& re , String& sourceName, String& fileName, size_t blockSize) {
 	std::ifstream src(sourceName, std::ios::binary); // opens the file in binary mode , file is read byte by byte
 	String errorMessage("");
 	if (!src) {
@@ -3378,7 +3458,7 @@ bool checkNames(ifstream& container,uint64_t parent_offset, String dirName) {
 
 // when making a directory we have two options: 1. it is a single directory to make in the current dir (the same as cpin but whithout the extetion check (because its dir)) 
 // 12/16 - works perfectly
-String& md(ResourceManager& re, String& directoryName) {
+String md(ResourceManager& re, String& directoryName) {
 	String errorMessage("");
 	ifstream& container = re.getInputStream();
 	Metadata* parentMeta = nullptr;

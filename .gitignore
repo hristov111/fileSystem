@@ -1,0 +1,50 @@
+# Compiled binaries
+filesystem
+*.exe
+*.out
+*.app
+
+# Container files
+*.bin
+
+# Build directories
+x64/
+Debug/
+Release/
+
+# Visual Studio files
+*.vcxproj.user
+*.suo
+*.sdf
+*.opensdf
+.vs/
+
+# Object files
+*.o
+*.obj
+*.enc
+
+# Log files
+*.log
+
+# Build artifacts
+*.ilk
+*.pdb
+*.idb
+*.iobj
+*.ipdb
+*.tlog
+*.recipe
+*.lastbuildstate
+*.FileListAbsolute.txt
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
